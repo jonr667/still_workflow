@@ -16,14 +16,16 @@ from sqlalchemy.pool import StaticPool
 # from sqlalchemy.pool import QueuePool
 
 # Jon added this for some testing and it needs to be removed
-sys.path.append('/Users/wintermute/Desktop/projects/mwa/capo/Compress/ddr_compress/src')
-from scheduler import FILE_PROCESSING_STAGES
+
+from still.scheduler import FILE_PROCESSING_STAGES
 
 # Uncomment the following line after you hose Jon's stuff above
 # from ddr_compress.scheduler import FILE_PROCESSING_STAGES
 
 # Based on example here: http://www.pythoncentral.io/overview-sqlalchemys-expression-language-orm-queries/
 Base = declarative_base()
+
+# Jon : Not sure why the logger is defined here?
 logger = logging.getLogger('dbi')
 
 # dbinfo = {'username':'obs',
@@ -169,13 +171,13 @@ class DataBaseInterface(object):
             config = configparser.ConfigParser()
             configfile = os.path.expanduser(configfile)
             if os.path.exists(configfile):
-                logger.info('loading file '+configfile)
+                logger.info('loading file ' + configfile)
                 config.read(configfile)
                 self.dbinfo = config['dbinfo']
                 # .decode is not needed in python 3
                 # self.dbinfo['password'] = self.dbinfo['password'].decode('string-escape')
             else:
-                logging.info(configfile+" Not Found")
+                logging.info(configfile + " Not Found")
         if test:
             self.engine = create_engine('sqlite:///',
                                         connect_args={'check_same_thread': False},
@@ -184,12 +186,12 @@ class DataBaseInterface(object):
         else:
             if self.dbinfo['dbtype'] == 'postgresql':
                 try:
-                    print(self.dbinfo['username'])
+                    print(self.dbinfo['password'])
                     self.engine = create_engine(
                         'postgresql+psycopg2://{username}:{password}@{hostip}:{port}/{dbname}'.format(**self.dbinfo))
                 except:
                     print("Could not connect to the postgresql database.")
-                    exit(1)
+                    sys.exit(1)
             else:
                 self.engine = create_engine(
                     'mysql://{username}:{password}@{hostip}:{port}/{dbname}'.format(

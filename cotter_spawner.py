@@ -2,8 +2,9 @@
 # import sys
 import argparse
 import configparser
+import os
 
-from still.dbi import DataBaseInterface, Observation
+from still.dbi import DataBaseInterface, Observation, logger
 from still.scheduler import Scheduler
 
 
@@ -41,27 +42,30 @@ class MWADataBaseInterface(DataBaseInterface):
         return obsnum
 
 
-def sync_new_ops_from_ngas_to_still(db):
+def sync_new_ops_from_ngas_to_still(db,date_type):
     obsnum = 0
     date = 0
-    db.add_observation(obsnum=obsnum, date=date, date_type=date_type, pol=0, legth=2/60./24)
+    db.add_observation(obsnum=obsnum, date=date, date_type=date_type, pol=0, legth=2 / 60. / 24)
+
     return 0
 
-
 def read_config_file(SpawnerGlobal, config_file, config_name='testing'):
-    if configfile is not None:
+    if config_file is not None:
         config = configparser.ConfigParser()
-        configfile = os.path.expanduser(configfile)
-        if os.path.exists(configfile):
-            logger.info('loading file '+configfile)
-            config.read(configfile)
-            self.dbinfo = config[config_name]
+        config_file = os.path.expanduser(config_file)
+        if os.path.exists(config_file):
+        #    logger.info('loading file ' + config_file)
+            config.read(config_file)
+            dbinfo = config[config_name]
+            print(dbinfo)
+            
     return 0
 
 
 def main(SpawnerGlobal, args):
-    SpawnerGlobal.db = MWADataBaseInterface(test=False, configfile='/Users/wintermute/Desktop/Dropbox/Research/mwa_cotter_spawner/cotter_still.cfg')
+    SpawnerGlobal.db = MWADataBaseInterface(test=False, configfile='./cotter_still.cfg')
     if args.init is True:
+        print("Getting here to init...")
         SpawnerGlobal.db.createdb()
         exit(0)
     SpawnerGlobal.db.test_db()
@@ -81,12 +85,14 @@ SpawnerGlobal = SpawnerClass()
 parser = argparse.ArgumentParser(description='Process raw array data and cotterize the heck out of it')
 parser.add_argument('--init', dest='init', action='store_true',
                     help='Initialize the database if this is the first time running this')
-parser.add_argument('--config_file', dest='config_file', required=True,
+parser.add_argument('--config_file', dest='config_file', required=False,
                     help="Specify the complete path to the config file")
 parser.add_argument('--config_name', dest='config_name', default='test',
                     help="Specify header name to use in the config file (examples: test, production)")
+parser.set_defaults(config_file='./cotter_still.cfg')
 
-args = parser.parse_args()
+
+args, unknown = parser.parse_known_args()
 SpawnerGlobal.config_file = args.config_file
 print(SpawnerGlobal.config_file)
 main(SpawnerGlobal, args)
