@@ -17,6 +17,18 @@ class SpawnerClass:
         self.config_name = ''
 
 
+class MWAScheduler(Scheduler):
+
+    def __init__(self):
+        self.time_last_run = 0
+        
+    def ext_command_hook(self):
+        print("Ext_command_hook!")
+        print("Time Last run %s" % self.time_last_run)
+        self.time_last_run = self.time_last_run + 1
+        return
+
+
 class MWADataBaseInterface(DataBaseInterface):
 
     def add_observation(self, obsnum, date, date_type, pol, filename, host, length=2 / 60. / 24, status='UV_POT'):
@@ -42,23 +54,23 @@ class MWADataBaseInterface(DataBaseInterface):
         return obsnum
 
 
-def sync_new_ops_from_ngas_to_still(db,date_type):
-    obsnum = 0
-    date = 0
-    db.add_observation(obsnum=obsnum, date=date, date_type=date_type, pol=0, legth=2 / 60. / 24)
+def sync_new_ops_from_ngas_to_still(db):
+
+    
+    # db.add_observation(obsnum=obsnum, date=date, date_type=date_type, pol=0, legth=2 / 60. / 24)
 
     return 0
+
 
 def read_config_file(SpawnerGlobal, config_file, config_name='testing'):
     if config_file is not None:
         config = configparser.ConfigParser()
         config_file = os.path.expanduser(config_file)
         if os.path.exists(config_file):
-        #    logger.info('loading file ' + config_file)
+            #    logger.info('loading file ' + config_file)
             config.read(config_file)
             dbinfo = config[config_name]
             print(dbinfo)
-            
     return 0
 
 
@@ -69,9 +81,10 @@ def main(SpawnerGlobal, args):
         SpawnerGlobal.db.createdb()
         exit(0)
     SpawnerGlobal.db.test_db()
-    myscheduler = Scheduler()
+    myscheduler = MWAScheduler()
+    scheduler_init = MWAScheduler.init(myscheduler)
     # Will probably want to crank the sleep time up a bit in the future....
-    Scheduler.start(myscheduler, dbi=SpawnerGlobal.db, sleeptime=10)
+    myscheduler.start(dbi=SpawnerGlobal.db, sleeptime=2)
     return 0
 
 # Spawner = SpawnerClass
