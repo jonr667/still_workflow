@@ -225,7 +225,7 @@ class Scheduler:
         # *** Change this so that it lets the database select all the recoreds that
         # are not complete or we could be loading in thousands of records for this
         for f in dbi.list_observations():
-            if dbi.get_obs_status(f) != 'COMPLETE' and not self.active_obs_dict.has_key(f):
+            if dbi.get_obs_status(f) != 'COMPLETE' and not self._active_obs_dict.has_key(f):
                     self._active_obs_dict[f] = len(self.active_obs)
                     self.active_obs.append(f)
 

@@ -98,10 +98,10 @@ neighbors = Table("neighbors", Base.metadata,
 
 class Observation(Base):
     __tablename__ = 'observation'
-    date = Column(Numeric(16, 8))
+    date = Column(BigInteger)  # Jon: Changed this to a biginteger for now... Though I can probably just pad my date
     date_type = Column(String(100))
     pol = Column(String(4))
-    # *JON* removed defult=updateobsnum, late should figure out how to just override the alchamy base class thinggie.
+    # *JON* removed default=updateobsnum, late should figure out how to just override the alchamy base class thinggie.
     # obsnum = Column(BigInteger, default=updateobsnum, primary_key=True)
     obsnum = Column(BigInteger, primary_key=True)
     status = Column(Enum(*FILE_PROCESSING_STAGES, name='FILE_PROCESSING_STAGES'))
@@ -109,8 +109,8 @@ class Observation(Base):
     length = Column(Float)  # length of observation in fraction of a day
     currentpid = Column(Integer)
     stillhost = Column(String(100))
-    stillpath = Column(String(100))
-    outputpath = Column(String(100))
+    stillpath = Column(String(200))
+    outputpath = Column(String(200))
     outputhost = Column(String(100))
     high_neighbors = relationship("Observation",
                                   secondary=neighbors,
@@ -122,7 +122,7 @@ class Observation(Base):
 class File(Base):
     __tablename__ = 'file'
     filenum = Column(Integer, primary_key=True)
-    filename = Column(String(100))
+    filename = Column(String(200))
     host = Column(String(100))
     obsnum = Column(BigInteger, ForeignKey('observation.obsnum'))
     # this next line creates an attribute Observation.files which is the list of all
@@ -188,7 +188,7 @@ class DataBaseInterface(object):
                 try:
                     print(self.dbinfo['password'])
                     self.engine = create_engine(
-                        'postgresql+psycopg2://{username}:{password}@{hostip}:{port}/{dbname}'.format(**self.dbinfo))
+                        'postgresql+psycopg2://{username}:{password}@{hostip}:{port}/{dbname}'.format(**self.dbinfo), echo=True)
                 except:
                     print("Could not connect to the postgresql database.")
                     sys.exit(1)
@@ -308,13 +308,14 @@ class DataBaseInterface(object):
         s.close()
         return FAILED_OBSNUMS
 
-    def add_observation(self, date, date_type, pol, filename, host, length=10/60./24, status='UV_POT'):
+    def add_observation(self, date, date_type, pol, filename, host, length=10 / 60. / 24, status='UV_POT'):
         """
         create a new observation entry.
         returns: obsnum  (see jdpol2obsnum)
         Note: does not link up neighbors!
         """
         OBS = Observation(date=date, date_type=date_type, pol=pol, status=status, length=length)
+        print(OBS)
         s = self.Session()
         s.add(OBS)
         s.commit()
@@ -328,7 +329,7 @@ class DataBaseInterface(object):
         """
         Add a file to the database and associate it with an observation.
         """
-        FILE = File(filename=filename, vhost=host)
+        FILE = File(filename=filename, host=host)
         # get the observation corresponding to this file
         s = self.Session()
         OBS = s.query(Observation).filter(Observation.obsnum == obsnum).one()
