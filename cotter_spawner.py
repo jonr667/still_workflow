@@ -5,7 +5,7 @@ import configparser
 import os
 import psycopg2
 import psycopg2.extras
-
+import numpy as np
 from still.dbi import DataBaseInterface, Observation, logger
 from still.scheduler import Scheduler
 
@@ -58,7 +58,7 @@ class MWADataBaseInterface(DataBaseInterface):
 
 
 def sync_new_ops_from_ngas_to_still(db):
-    # will change this over to SQL alchemy probably later
+    # will maybe change this over to SQL alchemy later
     # Throwing it in now as straight SQL to get things working
     # so I can move onto other parts for the moment
     try:
@@ -66,17 +66,20 @@ def sync_new_ops_from_ngas_to_still(db):
     except:
         print("I am unable to connect to the database")
     print("Probably connected")
-    cur = pgconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("""SELECT foreign_ngas_files.disk_id,file_id,cast(substring(foreign_ngas_files.file_id, 1,10) AS bigint) AS obsid,mount_point,host_id
+    #    cur = pgconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = pgconn.cursor()
+    cur.execute("""SELECT cast(substring(foreign_ngas_files.file_id, 1,10) AS character varying(30))
                    FROM
-                      foreign_ngas_files, foreign_ngas_disks
+                      foreign_ngas_files
                    WHERE
                       cast(substring(foreign_ngas_files.file_id, 1,10) AS bigint) NOT IN (SELECT obsid FROM foreign_mwa_qc WHERE obsid IS NOT NULL)
                       AND cast(substring(foreign_ngas_files.file_id, 1,10) AS bigint) NOT IN (SELECT obsnum FROM observation WHERE obsnum IS NOT NULL)
-                      AND foreign_ngas_files.disk_id = foreign_ngas_disks.disk_id
-                   LIMIT 10""")
+                   """)
+
     rows = cur.fetchall()
-    print(rows[0])
+
+    unique_obsids = np.unique(rows)
+    print(unique_obsids)
     # db.add_observation(obsnum=obsnum, date=date, date_type=date_type, pol=0, legth=2 / 60. / 24)
 
     return 0
@@ -95,15 +98,19 @@ def read_config_file(SpawnerGlobal, config_file, config_name='testing'):
 
 
 def main(SpawnerGlobal, args):
+    # Instantiate a still db instance from our superclass
     SpawnerGlobal.db = MWADataBaseInterface(test=False, configfile='./cotter_still.cfg')
-    if args.init is True:
-        print("Getting here to init...")
+    if args.init is True:   # See if we were told to initiate the database
         SpawnerGlobal.db.createdb()
         exit(0)
-    SpawnerGlobal.db.test_db()
+    try:
+        SpawnerGlobal.db.test_db()  # Testing the database to make sure we made a connection, its fun..
+    except:
+        print("We could not run a test on the database and are aborting.  Please check the DBI DB config")
+        exit(1)
     sync_new_ops_from_ngas_to_still(SpawnerGlobal.db)
     myscheduler = MWAScheduler()
-    scheduler_init = MWAScheduler.init(myscheduler)
+    MWAScheduler.init(myscheduler)
     # Will probably want to crank the sleep time up a bit in the future....
     myscheduler.start(dbi=SpawnerGlobal.db, sleeptime=2)
     return 0
@@ -115,14 +122,14 @@ parser = argparse.ArgumentParser(description='Process MWA data.')
 SpawnerGlobal = SpawnerClass()
 
 # Probably accept config file location and maybe config file section as command line arguments
+# for the moment this is mostly just placeholder stuffs
 
 parser = argparse.ArgumentParser(description='Process raw array data and cotterize the heck out of it')
 parser.add_argument('--init', dest='init', action='store_true',
                     help='Initialize the database if this is the first time running this')
 parser.add_argument('--config_file', dest='config_file', required=False,
                     help="Specify the complete path to the config file")
-parser.add_argument('--config_name', dest='config_name', default='test',
-                    help="Specify header name to use in the config file (examples: test, production)")
+
 parser.set_defaults(config_file='./cotter_still.cfg')
 
 
