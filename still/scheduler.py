@@ -4,7 +4,7 @@ import logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('scheduler')
 logger.setLevel(logging.DEBUG)
-MAXFAIL = 5
+MAXFAIL = 5  # Jon : move this into config
 # NEW is for db use internally.  Scheduler only ever gets UV_POT and onward from data base
 # Removing the POT_TO_USA step
 FILE_PROCESSING_STAGES = ['NEW', 'UV_POT', 'UV', 'UVC', 'CLEAN_UV', 'UVCR', 'CLEAN_UVC',

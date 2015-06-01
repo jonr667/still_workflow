@@ -101,7 +101,7 @@ class Observation(Base):
     date = Column(BigInteger)  # Jon: Changed this to a biginteger for now... Though I can probably just pad my date
     date_type = Column(String(100))
     pol = Column(String(4))
-    # *JON* removed default=updateobsnum, late should figure out how to just override the alchamy base class thinggie.
+    # JON: removed default=updateobsnum, late, should figure out how to just override the alchamy base class thinggie.
     # obsnum = Column(BigInteger, default=updateobsnum, primary_key=True)
     obsnum = Column(BigInteger, primary_key=True)
     status = Column(Enum(*FILE_PROCESSING_STAGES, name='FILE_PROCESSING_STAGES'))
@@ -369,13 +369,13 @@ class DataBaseInterface(object):
             OBS = s.query(Observation).filter(Observation.obsnum == middleobsnum).one()
             if not neighbors[middleobsnum][0] is None:
                 L = s.query(Observation).filter(
-                                                Observation.date == neighbors[middleobsnum][0],
-                                                Observation.pol == OBS.pol).one()
+                    Observation.date == neighbors[middleobsnum][0],
+                    Observation.pol == OBS.pol).one()
                 OBS.low_neighbors = [L]
             if not neighbors[middleobsnum][1] is None:
                 H = s.query(Observation).filter(
-                        Observation.date == neighbors[middleobsnum][1],
-                        Observation.pol == OBS.pol).one()
+                    Observation.date == neighbors[middleobsnum][1],
+                    Observation.pol == OBS.pol).one()
                 OBS.high_neighbors = [H]
                 sys.stdout.flush()
             OBS.status = status
