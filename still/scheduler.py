@@ -7,6 +7,7 @@ logger.setLevel(logging.DEBUG)
 MAXFAIL = 5  # Jon : move this into config
 # NEW is for db use internally.  Scheduler only ever gets UV_POT and onward from data base
 # Removing the POT_TO_USA step
+# HARDWF
 FILE_PROCESSING_STAGES = ['NEW', 'UV_POT', 'UV', 'UVC', 'CLEAN_UV', 'UVCR', 'CLEAN_UVC',
                           'ACQUIRE_NEIGHBORS', 'UVCRE', 'NPZ', 'UVCRR', 'NPZ_POT', 'CLEAN_UVCRE', 'UVCRRE',
                           'CLEAN_UVCRR', 'CLEAN_NPZ', 'CLEAN_NEIGHBORS', 'UVCRRE_POT', 'CLEAN_UVCRRE', 'CLEAN_UVCR',
@@ -22,7 +23,8 @@ ENDFILE_PROCESSING_LINKS['CLEAN_UVC'] = 'CLEAN_UVCR'
 ENDFILE_PROCESSING_LINKS['CLEAN_UVCR'] = 'COMPLETE'
 
 FILE_PROCESSING_PREREQS = {  # link task to prerequisite state of neighbors, key not present assumes no prereqs
-    'ACQUIRE_NEIGHBORS': (FILE_PROCESSING_STAGES.index('UVCR'), FILE_PROCESSING_STAGES.index('CLEAN_UVCR')),
+    'ACQUIRE_NEIGHBORS': (FILE_PROCESSING_STAGES.index('UVCR'),
+                          FILE_PROCESSING_STAGES.index('CLEAN_UVCR')),
     'CLEAN_UVCR': (FILE_PROCESSING_STAGES.index('UVCRRE'), None),
 }
 
@@ -35,7 +37,7 @@ class Action:
         still:still action will run on.'''
         self.obs = obs
         self.task = task
-        self.is_transfer = (task == 'POT_TO_USA')  # XXX don't like hardcoded value here
+        self.is_transfer = (task == 'POT_TO_USA')  # XXX don't like hardcoded value here HARDWF
         self.neighbor_status = neighbor_status
         self.still = still
         self.priority = 0
@@ -225,7 +227,7 @@ class Scheduler:
         # *** Change this so that it lets the database select all the recoreds that
         # are not complete or we could be loading in thousands of records for this
         for f in dbi.list_observations():
-            if dbi.get_obs_status(f) != 'COMPLETE' and not self._active_obs_dict.has_key(f):
+            if dbi.get_obs_status(f) != 'COMPLETE' and not self._active_obs_dict.has_key(f): # HARDWF
                     self._active_obs_dict[f] = len(self.active_obs)
                     self.active_obs.append(f)
 
@@ -252,7 +254,7 @@ class Scheduler:
         ActionClass: a subclass of Action, for customizing actions.
             None defaults to the standard Action'''
         status = dbi.get_obs_status(obs)
-        if status == 'COMPLETE':
+        if status == 'COMPLETE':  # HARDWF
             return None  # obs is complete
         neighbors = dbi.get_neighbors(obs)
         if None in neighbors:  # is this an end-file that can't be processed past UVCR?

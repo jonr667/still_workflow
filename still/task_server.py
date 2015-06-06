@@ -47,7 +47,7 @@ class Task:
     def run(self):
         if self.process is not None:
             raise RuntimeError('Cannot run a Task that has been run already.')
-        if self.task == 'UV':  # on first copy of data to still, record in db that obs is assigned here
+        if self.task == 'UV':  # on first copy of data to still, record in db that obs is assigned here *HARDWF*
             self.dbi.set_obs_still_host(self.obs, self.still)
             self.dbi.set_obs_still_path(self.obs, os.path.abspath(self.cwd))
         self.process = self._run()
@@ -153,7 +153,9 @@ class TaskClient:
             if not neighbors_base[0] is None: rv = [neighbors_base[0]+appendage] + rv
             if not neighbors_base[1] is None: rv = rv + [neighbors_base[1]+appendage]
             return rv
-            args = {
+
+           # HARDWF
+            args = {   
                 'UV': [basename, '%s:%s/%s' % (pot, path, basename)],
                 'UVC': [basename],
                 'CLEAN_UV': [basename],
@@ -232,7 +234,7 @@ class TaskHandler(SocketServer.BaseRequestHandler):
         logger.info('TaskHandler.handle: received (%s,%d) with args=%s' % (task, obs, ' '.join(args)))
         if task == 'KILL':
             self.server.kill(int(args[0]))  # TODO I THINK THIS IS WHERE WE HAVE A PROBLE. RUN and maybe COMPLETE need to clean up existing threads.
-        elif task == 'COMPLETE':
+        elif task == 'COMPLETE': # HARDWF
             self.server.dbi.set_obs_status(obs, task)
         else:
             t = Task(task, obs, still, args, self.server.dbi, self.server.data_dir)
