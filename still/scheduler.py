@@ -55,27 +55,28 @@ class Action:
         We don't check that the center obs is in the prerequisite state,
         since this action could not have been generated otherwise.'''
         try:
-            # Jon: I'm leaving this is only accepting 2 at the moment but it would probably be nice to come back and clean this up
+            # This whole function could still be a bit off, haven't been able to fully test it yet.
+            # Jon: I'm leaving this, it only accepting 2 at the moment but it would probably be nice to come back and clean this up
             # to support however many
-            print("I'm checking prereqs %s - |%s| \n") % (self.wf.action_prereqs, self.task)
-
             # index1, index2 = FILE_PROCESSING_PREREQS[self.task]
             if self.task in self.wf.action_prereqs:
-                print("Getting inside\n")
-                sys.exit(0)
-                index1 = self.wf.actions[self.wf.actions_prereqs[self.task][0]].index()
-                index2 = self.wf.actions[self.wf.actions_prereqs[self.task][1]].index()
-                sys.exit(0)
+                index1 = self.wf.workflow_actions.index(self.wf.action_prereqs[self.task][0])
+            else:
+                return True  # jon : I only put this here due to the original try except did this..
+                try:
+                    index2 = self.wf.workflow_actions.index(self.wf.action_prereqs[self.task][1])
+                except:
+                    index2 = -1
         except(KeyError):  # this task has no prereqs
-            print("I fucked up\n")
-            sys.exit(0)
+            # Not sure why this returns true here
             return True
         # logger.debug('Action.has_prerequisites: checking (%s,%d) neighbor_status=%s' % (self.task, self.obs, self.neighbor_status))
-        sys.exit(0)
+
         for status_of_neighbor in self.neighbor_status:
             if status_of_neighbor is None:  # indicates that obs hasn't been entered into DB yet
                 return False
-            index_of_neighbor_status = FILE_PROCESSING_STAGES.index(status_of_neighbor)
+            # index_of_neighbor_status = FILE_PROCESSING_STAGES.index(status_of_neighbor)
+            index_of_neighbor_status = self.wf.workflow_actions.index(status_of_neighbor)
             if index1 is not None and index_of_neighbor_status < index1:
                 return False
             if index2 is not None and index_of_neighbor_status >= index2:

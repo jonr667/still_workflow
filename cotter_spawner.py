@@ -30,8 +30,6 @@ class SpawnerClass:
     #
     # Just create a class so I have a place to store some long lasting variables
     #
-    CommandLineArgs = ''
-
     def __init__(self):
         self.data = []
         self.config_file = ''
@@ -150,7 +148,7 @@ def process_config_file(sg, wf):
         for action in wf.workflow_actions:  # Collect all the prereqs and arg strings for any action of the workflow and throw them into a dict of keys and lists
             if action in config_sections:
                 if config.has_option(action, "prereqs"):
-                    wf.action_prereqs[action] = config.get(action, "prereqs").strip().split(",")
+                    wf.action_prereqs[action] = config.get(action, "prereqs").replace(" ", "").split(",")
                 if config.has_option(action, "args"):
                     wf.action_args[action] = config.get(action, "args")
 

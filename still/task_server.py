@@ -148,17 +148,21 @@ class TaskClient:
             neighbors_base[0] = self.dbi.get_input_file(neighbors_base[0])[-1]
         if not neighbors_base[1] is None:
             neighbors_base[1] = self.dbi.get_input_file(neighbors_base[1])[-1]
-        # Jon : I'm not sure why this function is burried, here, we should probably change this.
+
+        # Jon : closurs are a bit weird but cool
         def interleave(filename, appendage='cR'):
             # make sure this is in sync with do_X.sh task scripts.
             rv = [filename]
-            if not neighbors_base[0] is None: rv = [neighbors_base[0]+appendage] + rv
-            if not neighbors_base[1] is None: rv = rv + [neighbors_base[1]+appendage]
+            if neighbors_base[0] is not None:
+                rv = [neighbors_base[0] + appendage] + rv
+            if neighbors_base[1] is not None:
+                rv = rv + [neighbors_base[1] + appendage]
             return rv
 
         # Jon: HARDWF
         # Should move all this to the scripts themselves, this thing should just give the host,path,filename
         # Need to figure out what to do though for the AQUIRE_NEIGHBORS & CLEAN_NEIGHBORS
+        # Going to use exec to handle AQUIRE_NEIGHBORS & CLEAN_NEIGHBORS etc..
             args = {
                 'UV': [basename, '%s:%s/%s' % (pot, path, basename)],
                 'UVC': [basename],
