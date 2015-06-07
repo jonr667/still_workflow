@@ -188,7 +188,7 @@ class DataBaseInterface(object):
                 try:
                     print(self.dbinfo['password'])
                     self.engine = create_engine(
-                        'postgresql+psycopg2://{username}:{password}@{hostip}:{port}/{dbname}'.format(**self.dbinfo), echo=True)
+                        'postgresql+psycopg2://{username}:{password}@{hostip}:{port}/{dbname}'.format(**self.dbinfo), echo=False)  # Set echo=True to Enable debug mode
                 except:
                     print("Could not connect to the postgresql database.")
                     sys.exit(1)
@@ -212,6 +212,13 @@ class DataBaseInterface(object):
         s = self.Session()
         # todo tests
         obsnums = [obs.obsnum for obs in s.query(Observation).filter(Observation.status != 'NEW')]
+        s.close()
+        return obsnums
+
+    def list_open_observations(self):
+        s = self.Session()
+        # todo tests
+        obsnums = [obs.obsnum for obs in s.query(Observation).filter(Observation.status != 'NEW', Observation.status != 'COMPLETE')]
         s.close()
         return obsnums
 

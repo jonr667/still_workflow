@@ -1,5 +1,6 @@
 import time
 import logging
+import sys
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('scheduler')
@@ -12,7 +13,7 @@ FILE_PROCESSING_STAGES = ['NEW', 'UV_POT', 'UV', 'UVC', 'CLEAN_UV', 'UVCR', 'CLE
                           'ACQUIRE_NEIGHBORS', 'UVCRE', 'NPZ', 'UVCRR', 'NPZ_POT', 'CLEAN_UVCRE', 'UVCRRE',
                           'CLEAN_UVCRR', 'CLEAN_NPZ', 'CLEAN_NEIGHBORS', 'UVCRRE_POT', 'CLEAN_UVCRRE', 'CLEAN_UVCR',
                           'COMPLETE']
-FILE_PROCESSING_LINK = {}
+FILE_PROCESSING_LINKS = {}
 for i, k in enumerate(FILE_PROCESSING_STAGES[:-1]):
     FILE_PROCESSING_LINKS[k] = FILE_PROCESSING_STAGES[i + 1]
 FILE_PROCESSING_LINKS['COMPLETE'] = None
@@ -31,18 +32,19 @@ FILE_PROCESSING_PREREQS = {  # link task to prerequisite state of neighbors, key
 
 class Action:
     '''An Action performs a task on an observation, and is scheduled by a Scheduler.'''
-    def __init__(self, obs, task, neighbor_status, still, timeout=3600.):
+    def __init__(self, obs, task, neighbor_status, still, workflow, timeout=3600.):
         '''f:obs, task:target status,
         neighbor_status:status of adjacent obs (do not enter a status for a non-existent neighbor
         still:still action will run on.'''
         self.obs = obs
         self.task = task
-        self.is_transfer = (task == 'POT_TO_USA')  # XXX don't like hardcoded value here HARDWF
+        self.is_transfer = ''  # = (task == 'POT_TO_USA')  # XXX don't like hardcoded value here HARDWF JON: commented out POT_TO_USA part, I don't think its used anymore
         self.neighbor_status = neighbor_status
         self.still = still
         self.priority = 0
         self.launch_time = -1
         self.timeout = timeout
+        self.wf = workflow
 
     def set_priority(self, p):
         '''Assign a priority to this action.  Highest priorities are scheduled first.'''
@@ -53,17 +55,30 @@ class Action:
         We don't check that the center obs is in the prerequisite state,
         since this action could not have been generated otherwise.'''
         try:
-            index1, index2 = FILE_PROCESSING_PREREQS[self.task]
+            # Jon: I'm leaving this is only accepting 2 at the moment but it would probably be nice to come back and clean this up
+            # to support however many
+            print("I'm checking prereqs %s - |%s| \n") % (self.wf.action_prereqs, self.task)
+
+            # index1, index2 = FILE_PROCESSING_PREREQS[self.task]
+            if self.task in self.wf.action_prereqs:
+                print("Getting inside\n")
+                sys.exit(0)
+                index1 = self.wf.actions[self.wf.actions_prereqs[self.task][0]].index()
+                index2 = self.wf.actions[self.wf.actions_prereqs[self.task][1]].index()
+                sys.exit(0)
         except(KeyError):  # this task has no prereqs
+            print("I fucked up\n")
+            sys.exit(0)
             return True
         # logger.debug('Action.has_prerequisites: checking (%s,%d) neighbor_status=%s' % (self.task, self.obs, self.neighbor_status))
-        for status in self.neighbor_status:
-            if status is None:  # indicates that obs hasn't been entered into DB yet
+        sys.exit(0)
+        for status_of_neighbor in self.neighbor_status:
+            if status_of_neighbor is None:  # indicates that obs hasn't been entered into DB yet
                 return False
-            index = FILE_PROCESSING_STAGES.index(status)
-            if index1 is not None and index < index1:
+            index_of_neighbor_status = FILE_PROCESSING_STAGES.index(status_of_neighbor)
+            if index1 is not None and index_of_neighbor_status < index1:
                 return False
-            if index2 is not None and index >= index2:
+            if index2 is not None and index_of_neighbor_status >= index2:
                 return False
             # logger.debug('Action.has_prerequisites: (%s,%d) prerequisites met' % (self.task, self.obs))
         return True
@@ -97,10 +112,9 @@ class Scheduler:
 
     # Jon : This is done via init, we may want to rewrite this part to do it as a __init__
     # to make instantiating the object little nicer
-    def init(self, nstills=4, actions_per_still=8, transfers_per_still=2, blocksize=10):
-        '''nstills: # of stills in system,
-        actions_per_still: # of actions that can be scheduled simultaneously
-                           per still.'''
+    def __init__(self, workflow, nstills=4, actions_per_still=8, transfers_per_still=2, blocksize=10):
+        '''nstills:           # of stills in system,
+           actions_per_still: # of actions that can be scheduled simultaneously per still.'''
         self.nstills = nstills
         self.actions_per_still = actions_per_still
         self.transfers_per_still = transfers_per_still
@@ -113,6 +127,7 @@ class Scheduler:
             self.launched_actions[still] = []
         self._run = False
         self.failcount = {}
+        self.wf = workflow  # Jon: Moved the workflow class to instantiated on object creation, should do the same for dbi probably
         # dict of {obsid+status,failcount}
         # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         # fh = logging.StreamHandler()
@@ -131,6 +146,8 @@ class Scheduler:
     def start(self, dbi, ActionClass=None, action_args=(), sleeptime=.1):
         '''Begin scheduling (blocking).
         dbi: DataBaseInterface'''
+
+        print(self.wf.action_prereqs)
         self._run = True
         logger.info('Scheduler.start: entering loop')
 
@@ -224,12 +241,15 @@ class Scheduler:
         # was called, clean_completed_actions() must be called first to ensure
         # that cleanup occurs before.  Is this true? if so, should add mechanism
         # to ensure ordering
-        # *** Change this so that it lets the database select all the recoreds that
+        # Jon: Change this so that it lets the database select all the recoreds that
         # are not complete or we could be loading in thousands of records for this
-        for f in dbi.list_observations():
-            if dbi.get_obs_status(f) != 'COMPLETE' and not self._active_obs_dict.has_key(f): # HARDWF
-                    self._active_obs_dict[f] = len(self.active_obs)
-                    self.active_obs.append(f)
+#        for f in dbi.list_observations():  # Jon: Lets change this from dbi.list_observations to one that only grabs non COMPLETE obsid's
+        for open_obs in dbi.list_open_observations():  # Jon: replaced the above with this one that throws out NEW and COMPLETE obsid's
+            # if dbi.get_obs_status(f) != 'COMPLETE' and not self._active_obs_dict.has_key(f):  # HARDWF Jon: I think I'm ok with this hardcode, need to rewrite, don't need to check complete
+            if open_obs not in self._active_obs_dict:  # HARDWF Jon: I think I'm ok with this hardcode, need to rewrite, don't need to check complete
+                    self._active_obs_dict[open_obs] = len(self.active_obs)
+                    self.active_obs.append(open_obs)
+        return
 
     def update_action_queue(self, dbi, ActionClass=None, action_args=()):
         '''Based on the current list of active obs (which you might want
@@ -241,10 +261,18 @@ class Scheduler:
         actions = [a for a in actions if not self.already_launched(a)]  # filter actions already launched
         actions = [a for a in actions if self.failcount.get(str(a.obs) + dbi.get_obs_status(a.obs), 0) < MAXFAIL]  # filter actions that have utterly failed us
         actions = [a for a in actions if not a.obs in failed]  # Filter actions that have failed before
-        for a in actions:
-            a.set_priority(self.determine_priority(a, dbi))
+
+        if self.wf.prioritize_obs == 1:
+            for a in actions:
+                a.set_priority(self.determine_priority(a, dbi))
+
         actions.sort(action_cmp, reverse=True)  # place most important actions first
         self.action_queue = actions  # completely throw out previous action list
+        for i in actions:
+            print("Actions %s") % i.obs
+            print("Actions %s") % i.task
+
+        return
 
     def get_action(self, dbi, obs, ActionClass=None, action_args=()):
         '''Find the next actionable step for obs f (one for which all
@@ -254,25 +282,32 @@ class Scheduler:
         ActionClass: a subclass of Action, for customizing actions.
             None defaults to the standard Action'''
         status = dbi.get_obs_status(obs)
-        if status == 'COMPLETE':  # HARDWF
+        if status == 'COMPLETE':  # Jon: May be worth adding some code here to make sure to pop this observation out of the queue so we don't keep hitting it
             return None  # obs is complete
         neighbors = dbi.get_neighbors(obs)
         if None in neighbors:  # is this an end-file that can't be processed past UVCR?
-            next_step = ENDFILE_PROCESSING_LINKS[status]
+            # next_step = ENDFILE_PROCESSING_LINKS[status]
+            cur_step_index = self.wf.workflow_actions_endfile.index(status)
+            next_step = self.wf.workflow_actions_endfile[cur_step_index + 1]
+            print(next_step)
         else:  # this is a normal file
-            next_step = FILE_PROCESSING_LINKS[status]
-        neighbor_status = [dbi.get_obs_status(n) for n in neighbors if not n is None]
+            # next_step = FILE_PROCESSING_LINKS[status]
+            cur_step_index = self.wf.workflow_actions.index(status)
+            next_step = self.wf.workflow_actions[cur_step_index + 1]
+            print(next_step)
+        neighbor_status = [dbi.get_obs_status(n) for n in neighbors if n is not None]
         # XXX shoudl check first if obs has been assigned to a still in the db already and continue to use that
         # and only generate a new still # if it hasn't been assigned one already.
         still = self.obs_to_still(obs)
         if ActionClass is None:
             ActionClass = Action
-        a = ActionClass(obs, next_step, neighbor_status, still, *action_args)
-        if a.has_prerequisites():
-            return a
-        else:
-            #logging.debug('scheduler.get_action: (%s,%d) does not have prereqs' % (a.task, a.obs))
-            return None
+        a = ActionClass(obs, next_step, neighbor_status, still, self.wf, *action_args)
+
+        if self.wf.neighbors == 1:
+            if a.has_prerequisites():
+                return a
+        # logging.debug('scheduler.get_action: (%s,%d) does not have prereqs' % (a.task, a.obs))
+        return None
 
     def determine_priority(self, action, dbi):
         '''Assign a priority to an action based on its status and the time

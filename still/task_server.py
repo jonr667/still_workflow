@@ -137,15 +137,17 @@ class TaskClient:
         self.sock.sendto(pkt, self.host_port)
 
     def gen_args(self, task, obs):
-        pot, path, basename = self.dbi.get_input_file(obs)
+        pot, path, basename = self.dbi.get_input_file(obs)  # Jon: Pot I believe is host where file to process is, basename is just the file name
         outhost, outpath = self.dbi.get_output_location(obs)
         # hosts and paths are not used except for ACQUIRE_NEIGHBORS and CLEAN_NEIGHBORS
         stillhost, stillpath = self.dbi.get_obs_still_host(obs), self.dbi.get_obs_still_path(obs)
         neighbors = [(self.dbi.get_obs_still_host(n), self.dbi.get_obs_still_path(n)) + self.dbi.get_input_file(n)
-            for n in self.dbi.get_neighbors(obs) if not n is None]
+                     for n in self.dbi.get_neighbors(obs) if n is not None]
         neighbors_base = list(self.dbi.get_neighbors(obs))
-        if not neighbors_base[0] is None: neighbors_base[0] = self.dbi.get_input_file(neighbors_base[0])[-1]
-        if not neighbors_base[1] is None: neighbors_base[1] = self.dbi.get_input_file(neighbors_base[1])[-1]
+        if not neighbors_base[0] is None:
+            neighbors_base[0] = self.dbi.get_input_file(neighbors_base[0])[-1]
+        if not neighbors_base[1] is None:
+            neighbors_base[1] = self.dbi.get_input_file(neighbors_base[1])[-1]
         # Jon : I'm not sure why this function is burried, here, we should probably change this.
         def interleave(filename, appendage='cR'):
             # make sure this is in sync with do_X.sh task scripts.
@@ -154,8 +156,10 @@ class TaskClient:
             if not neighbors_base[1] is None: rv = rv + [neighbors_base[1]+appendage]
             return rv
 
-           # HARDWF
-            args = {   
+        # Jon: HARDWF
+        # Should move all this to the scripts themselves, this thing should just give the host,path,filename
+        # Need to figure out what to do though for the AQUIRE_NEIGHBORS & CLEAN_NEIGHBORS
+            args = {
                 'UV': [basename, '%s:%s/%s' % (pot, path, basename)],
                 'UVC': [basename],
                 'CLEAN_UV': [basename],

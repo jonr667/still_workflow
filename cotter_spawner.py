@@ -19,7 +19,11 @@ class WorkFlow:
 
     def __init__(self):
         self.workflow_actions = ''
-        self.workflow_prereqs = {}
+        self.action_prereqs = {}
+        self.action_args = {}
+        self.workflow_actions_endfile = ''
+        self.prioritize_obs = 0
+        self.neighbors = 0
 
 
 class SpawnerClass:
@@ -37,12 +41,7 @@ class SpawnerClass:
 class MWAScheduler(Scheduler):
     #
     # Overload Scheduler class from still to be able to modify some functions
-    # 
-    def __init__(self):
-        #
-        # This function is just here for fun and testing
-        #
-        self.time_last_run = 0
+    #
 
     def ext_command_hook(self):
         #
@@ -125,34 +124,38 @@ def sync_new_ops_from_ngas_to_still(sg):
     return 0
 
 
-def read_config_file(sg, wf):
+def process_config_file(sg, wf):
     #
     # We will read the entire cnofig file here and push it into a class
-    # *This currently is a placeholder*
     #
-    if sg.config_file is not None:
-        config = configparser.ConfigParser()
-        #        config_file = os.path.expanduser(config_file)
-        if os.path.exists(sg.config_file):
-            #    logger.info('loading file ' + config_file)
-            config.read(sg.config_file)
-            config_sections = config.sections()
-            dbinfo = config['dbinfo']
-            workflow = config['WorkFlow']  # Get workflow actions
-            workflow_actions = workflow['actions'].split(",")
-            wf.workflow_actions = tuple(workflow_actions)  # Get all the workflow actions and put them in a nice immutible tuple
+    config = configparser.RawConfigParser()
+    #        config_file = os.path.expanduser(config_file)
+    if os.path.exists(sg.config_file):
+        #    logger.info('loading file ' + config_file)
+        config.read(sg.config_file)
 
-            for action in wf.workflow_actions:  # Collect all the prereqs for any action of the workflow and throw them into a dict of keys and lists
-                if action in config_sections:
-                    print(action)
-                    wf.workflow_prereqs[action] = config.get(action, "prereqs").split(",")
+        config_sections = config.sections()
+        dbinfo = config['dbinfo']
+        workflow = config['WorkFlow']  # Get workflow actions
+        workflow_actions = workflow['actions'].replace(" ", "").split(",")
+        wf.workflow_actions = tuple(workflow_actions)  # Get all the workflow actions and put them in a nice immutible tuple
+        workflow_actions_endfile = workflow['actions_endfile'].replace(" ", "").split(",")
+        wf.workflow_actions_endfile = tuple(workflow_actions_endfile)
 
-            print(wf.workflow_prereqs)
-        else:
-            print("Config file does not appear to exist : %s") % sg.config_file
-            sys.exit(1)
+        if config.has_option('WorkFlow', 'prioritize_obs'):
+            wf.prioritize_obs = int(config.get('WorkFlow', 'prioritize_obs'))
+        if config.has_option('WorkFlow', 'neighbors'):
+            wf.neighbors = int(config.get('WorkFlow', 'neighbors'))
+
+        for action in wf.workflow_actions:  # Collect all the prereqs and arg strings for any action of the workflow and throw them into a dict of keys and lists
+            if action in config_sections:
+                if config.has_option(action, "prereqs"):
+                    wf.action_prereqs[action] = config.get(action, "prereqs").strip().split(",")
+                if config.has_option(action, "args"):
+                    wf.action_args[action] = config.get(action, "args")
+
     else:
-        print("Could not find config file %s") % sg.config_file
+        print("Config file does not appear to exist : %s") % sg.config_file
         sys.exit(1)
     return 0
 
@@ -160,24 +163,25 @@ def read_config_file(sg, wf):
 def main(sg, wf, args):
     #
     # Instantiate a still db instance from our superclass
-    # Need to eventually call read_config_file first and then pass info and remove
-    # the reading of the config file from the DataBaseInterface class
     #
-    sys.exit(0)
+    process_config_file(SpawnerGlobal, workflow_objects)
     sg.db = MWADataBaseInterface(test=False, configfile=sg.config_file)
+
     if args.init is True:   # See if we were told to initiate the database
         sg.db.createdb()
-        exit(0)
+        sys.exit(0)
     try:
         sg.db.test_db()  # Testing the database to make sure we made a connection, its fun..
     except:
         print("We could not run a test on the database and are aborting.  Please check the DBI DB config")
-        exit(1)
-    sync_new_ops_from_ngas_to_still(sg)  # Lets get started and get a batch of new observations and push them into the db
-    myscheduler = MWAScheduler()  # Init scheduler daemon
-    MWAScheduler.init(myscheduler)
+        sys.exit(1)
+
+#    sync_new_ops_from_ngas_to_still(sg)  # Lets get started and get a batch of new observations and push them into the db
+    myscheduler = MWAScheduler(workflow=wf)  # Init scheduler daemon
+#    MWAScheduler.init(myscheduler)
     # Will probably want to crank the sleep time up a bit in the future....
     myscheduler.start(dbi=sg.db, sleeptime=2)  # Start the scheduler daemon
+
     return 0
 
 
@@ -205,7 +209,5 @@ parser.set_defaults(config_file='./cotter_still.cfg')
 
 args, unknown = parser.parse_known_args()
 SpawnerGlobal.config_file = args.config_file
-SpawnerGlobal.workflow = "Do1, Do2, Do3"
-read_config_file(SpawnerGlobal, workflow_objects)
-#print(SpawnerGlobal.workflow_actions)
+
 main(SpawnerGlobal, workflow_objects, args)
