@@ -53,9 +53,9 @@ class Action:
     def has_prerequisites(self):
         '''For the given task, check that neighbors are in prerequisite state.
         We don't check that the center obs is in the prerequisite state,
-        since this action could not have been generated otherwise.'''
+        s this action could not have been generated otherwise.'''
         try:
-            # This whole function could still be a bit off, haven't been able to fully test it yet.
+         x   # This whole function could still be a bit off, haven't been able to fully test it yet.
             # Jon: I'm leaving this, it only accepting 2 at the moment but it would probably be nice to come back and clean this up
             # to support however many
             # index1, index2 = FILE_PROCESSING_PREREQS[self.task]
