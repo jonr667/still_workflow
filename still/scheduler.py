@@ -113,7 +113,7 @@ class Scheduler:
 
     # Jon : This is done via init, we may want to rewrite this part to do it as a __init__
     # to make instantiating the object little nicer
-    def __init__(self, workflow, nstills=4, actions_per_still=8, transfers_per_still=2, blocksize=10):
+    def __init__(self, task_clients, workflow, nstills=4, actions_per_still=8, transfers_per_still=2, blocksize=10):
         '''nstills:           # of stills in system,
            actions_per_still: # of actions that can be scheduled simultaneously per still.'''
         self.nstills = nstills
@@ -129,6 +129,7 @@ class Scheduler:
         self._run = False
         self.failcount = {}
         self.wf = workflow  # Jon: Moved the workflow class to instantiated on object creation, should do the same for dbi probably
+        self.task_clients = task_clients
         # dict of {obsid+status,failcount}
         # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         # fh = logging.StreamHandler()

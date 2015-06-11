@@ -212,9 +212,8 @@ class Action(scheduler.Action):
 
 
 class Scheduler(scheduler.Scheduler):
-    def __init__(self, task_clients, actions_per_still=8, blocksize=10):
-        scheduler.Scheduler.__init__(self, nstills=len(task_clients),
-                                     actions_per_still=actions_per_still, blocksize=blocksize)
+    def __init__(self, task_clients, workflow, actions_per_still=8, blocksize=10):
+        scheduler.Scheduler.__init__(self, nstills=len(task_clients), actions_per_still=actions_per_still, blocksize=blocksize)
         self.task_clients = task_clients
 
     def kill_action(self, a):

@@ -9,7 +9,8 @@ import psycopg2.extras
 import numpy as np
 from still.dbi import DataBaseInterface, Observation, logger
 from still.scheduler import Scheduler
-
+# from still.task_server import TaskClient
+import still.task_server
 
 class WorkFlow:
     #
@@ -146,11 +147,14 @@ def process_config_file(sg, wf):
             wf.neighbors = int(config.get('WorkFlow', 'neighbors'))
 
         for action in wf.workflow_actions:  # Collect all the prereqs and arg strings for any action of the workflow and throw them into a dict of keys and lists
+            wf.action_args[action] = '\'%s:%s/%s\' % (pot, path, basename)'  # Put in a default host:path/filename for each actions arguements that get passed to do_ scripts
             if action in config_sections:
                 if config.has_option(action, "prereqs"):
                     wf.action_prereqs[action] = config.get(action, "prereqs").replace(" ", "").split(",")
                 if config.has_option(action, "args"):
                     wf.action_args[action] = config.get(action, "args")
+
+
 
     else:
         print("Config file does not appear to exist : %s") % sg.config_file
@@ -162,7 +166,7 @@ def main(sg, wf, args):
     #
     # Instantiate a still db instance from our superclass
     #
-    process_config_file(SpawnerGlobal, workflow_objects)
+    process_config_file(SpawnerGlobal, wf)
     sg.db = MWADataBaseInterface(test=False, configfile=sg.config_file)
 
     if args.init is True:   # See if we were told to initiate the database
@@ -175,11 +179,24 @@ def main(sg, wf, args):
         sys.exit(1)
 
 #    sync_new_ops_from_ngas_to_still(sg)  # Lets get started and get a batch of new observations and push them into the db
-    myscheduler = MWAScheduler(workflow=wf)  # Init scheduler daemon
+
 #    MWAScheduler.init(myscheduler)
     # Will probably want to crank the sleep time up a bit in the future....
-    myscheduler.start(dbi=sg.db, sleeptime=2)  # Start the scheduler daemon
+#    myscheduler.start(dbi=sg.db, sleeptime=2)  # Start the scheduler daemon
+    
+    # Throwing this in temporarily for testing, will put in config file as soon as I know its working.
+    STILLS = ['still4', 'still5']
+    PORTS = [14204, 14204]
+    ACTIONS_PER_STILL = 8  # how many actions that run in parallel on a still
+    BLOCK_SIZE = 10  # number of files that are sent together to a still
+    TIMEOUT = 600  # seconds; how long a task is allowed to be running before it is assumed to have failed
+    SLEEPTIME = 1.  # seconds; throttle on how often the scheduler polls the database
 
+    task_clients = [still.task_server.TaskClient(sg.db, s, port=p) for (s, p) in zip(STILLS, PORTS)]
+    # scheduler = ddr.task_server.Scheduler(task_clients, actions_per_still=ACTIONS_PER_STILL,blocksize=BLOCK_SIZE,nstills=len(STILLS))
+#    def __init__(self, workflow, nstills=4, actions_per_still=8, transfers_per_still=2, blocksize=10):
+    myscheduler = MWAScheduler(task_clients, wf, actions_per_still=ACTIONS_PER_STILL, blocksize=BLOCK_SIZE, nstills=len(STILLS))  # Init scheduler daemon
+    myscheduler.start(dbi=sg.db, ActionClass=still.task_server.Action, action_args=(task_clients, TIMEOUT), sleeptime=SLEEPTIME)
     return 0
 
 
