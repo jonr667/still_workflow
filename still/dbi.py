@@ -17,7 +17,7 @@ from sqlalchemy.pool import StaticPool
 
 # Jon added this for some testing and it needs to be removed
 
-from still.scheduler import FILE_PROCESSING_STAGES
+# from still.scheduler import FILE_PROCESSING_STAGES
 
 # Uncomment the following line after you hose Jon's stuff above
 # from ddr_compress.scheduler import FILE_PROCESSING_STAGES
@@ -104,7 +104,9 @@ class Observation(Base):
     # JON: removed default=updateobsnum, late, should figure out how to just override the alchamy base class thinggie.
     # obsnum = Column(BigInteger, default=updateobsnum, primary_key=True)
     obsnum = Column(BigInteger, primary_key=True)
-    status = Column(Enum(*FILE_PROCESSING_STAGES, name='FILE_PROCESSING_STAGES'))
+    # status = Column(Enum(*FILE_PROCESSING_STAGES, name='FILE_PROCESSING_STAGES'))
+    # Jon: There may be a very good reason to not just make this a string and I'm sure I will find out what it is soon enough
+    status = Column(String(200))
     # last_update = Column(DateTime,server_default=func.now(),onupdate=func.current_timestamp())
     length = Column(Float)  # length of observation in fraction of a day
     currentpid = Column(Integer)
@@ -135,7 +137,9 @@ class Log(Base):
     __tablename__ = 'log'
     lognum = Column(Integer, primary_key=True)
     obsnum = Column(BigInteger, ForeignKey('observation.obsnum'))
-    stage = Column(Enum(*FILE_PROCESSING_STAGES, name='FILE_PROCESSING_STAGES'))
+    # Jon: There may be a very good reason to not just make this a string and I'm sure I will find out what it is soon enough
+    stage = Column(String(200))
+    # stage = Column(Enum(*FILE_PROCESSING_STAGES, name='FILE_PROCESSING_STAGES'))
     exit_status = Column(Integer)
     timestamp = Column(DateTime, nullable=False, default=func.current_timestamp())
     logtext = Column(Text)
@@ -476,11 +480,18 @@ class DataBaseInterface(object):
         """
         s = self.Session()
         OBS = s.query(Observation).filter(Observation.obsnum == obsnum).one()
-        POTFILE = s.query(File).filter(
-            File.observation == OBS,
-            # File.host.like('%pot%'), # XXX temporarily commenting this out.
-            # need a better solution for finding original file
-            File.filename.like('%uv')).one()
+        # Jon: Maybe make the like statement a variable in the config file? for now I will cheat for a bit
+        try:
+            POTFILE = s.query(File).filter(
+                File.observation == OBS,
+                # File.host.like('%pot%'), # XXX temporarily commenting this out.
+                # need a better solution for finding original file
+                File.filename.like('%uv')).one()
+        except:
+            print("Could not get uv")
+        print("something")
+        # Jon : FIX ME!!!!!
+        POTFILE = s.query(File).filter(File.observation == OBS).first()
         host = POTFILE.host
         path = os.path.dirname(POTFILE.filename)
         file = os.path.basename(POTFILE.filename)

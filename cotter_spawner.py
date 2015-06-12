@@ -12,6 +12,7 @@ from still.scheduler import Scheduler
 # from still.task_server import TaskClient
 import still.task_server
 
+
 class WorkFlow:
     #
     # Setup a class to handle the workflow elements and be able to pass the actions, prereqs, etc.. around willy nilly
@@ -119,11 +120,11 @@ def sync_new_ops_from_ngas_to_still(sg):
             path = file_info['mount_point'] + '/' + file_info['file_name']
             print(path)
             SpawnerGlobal.db.add_file(obsid, file_info['host_id'][:-5], path)
-        exit(0)
+
     return 0
 
 
-def process_config_file(sg, wf):
+def process_client_config_file(sg, wf):
     #
     # We will read the entire cnofig file here and push it into a class
     #
@@ -154,19 +155,17 @@ def process_config_file(sg, wf):
                 if config.has_option(action, "args"):
                     wf.action_args[action] = config.get(action, "args")
 
-
-
     else:
         print("Config file does not appear to exist : %s") % sg.config_file
         sys.exit(1)
     return 0
 
 
-def main(sg, wf, args):
+def main_client(sg, wf, args):
     #
-    # Instantiate a still db instance from our superclass
+    # Instantiate a still client instance
     #
-    process_config_file(SpawnerGlobal, wf)
+    process_client_config_file(SpawnerGlobal, workflow_objects)
     sg.db = MWADataBaseInterface(test=False, configfile=sg.config_file)
 
     if args.init is True:   # See if we were told to initiate the database
@@ -179,26 +178,30 @@ def main(sg, wf, args):
         sys.exit(1)
 
 #    sync_new_ops_from_ngas_to_still(sg)  # Lets get started and get a batch of new observations and push them into the db
+#   sys.exit(0)
 
-#    MWAScheduler.init(myscheduler)
-    # Will probably want to crank the sleep time up a bit in the future....
-#    myscheduler.start(dbi=sg.db, sleeptime=2)  # Start the scheduler daemon
-    
-    # Throwing this in temporarily for testing, will put in config file as soon as I know its working.
-    STILLS = ['still4', 'still5']
-    PORTS = [14204, 14204]
+# Will probably want to crank the sleep time up a bit in the future....
+
+# Throwing this in temporarily for testing, will put in config file as soon as I know its working.
+    STILLS = ['localhost']
+    PORTS = [14204]
     ACTIONS_PER_STILL = 8  # how many actions that run in parallel on a still
     BLOCK_SIZE = 10  # number of files that are sent together to a still
     TIMEOUT = 600  # seconds; how long a task is allowed to be running before it is assumed to have failed
     SLEEPTIME = 1.  # seconds; throttle on how often the scheduler polls the database
 
     task_clients = [still.task_server.TaskClient(sg.db, s, port=p) for (s, p) in zip(STILLS, PORTS)]
-    # scheduler = ddr.task_server.Scheduler(task_clients, actions_per_still=ACTIONS_PER_STILL,blocksize=BLOCK_SIZE,nstills=len(STILLS))
-#    def __init__(self, workflow, nstills=4, actions_per_still=8, transfers_per_still=2, blocksize=10):
+
     myscheduler = MWAScheduler(task_clients, wf, actions_per_still=ACTIONS_PER_STILL, blocksize=BLOCK_SIZE, nstills=len(STILLS))  # Init scheduler daemon
     myscheduler.start(dbi=sg.db, ActionClass=still.task_server.Action, action_args=(task_clients, TIMEOUT), sleeptime=SLEEPTIME)
     return 0
 
+
+def main_server(sg):
+    #
+    # Instantiate a still server instance
+    #
+    return
 
 #
 # Mostly placeholder stuff for reading in command line aruments
@@ -216,13 +219,25 @@ workflow_objects = WorkFlow()
 parser = argparse.ArgumentParser(description='Process raw array data and cotterize the heck out of it')
 parser.add_argument('--init', dest='init', action='store_true',
                     help='Initialize the database if this is the first time running this')
+parser.add_argument('--server', dest='server', action='store_true',
+                    help='Start a Still Task Server')
+parser.add_argument('--client', dest='client', action='store_true',
+                    help='Start a Still Task Client')
 parser.add_argument('--config_file', dest='config_file', required=False,
                     help="Specify the complete path to the config file")
+
 
 parser.set_defaults(config_file='./cotter_still.cfg')
 
 
 args, unknown = parser.parse_known_args()
+
 SpawnerGlobal.config_file = args.config_file
 
-main(SpawnerGlobal, workflow_objects, args)
+
+if args.client is True:
+    main_client(SpawnerGlobal, workflow_objects, args)
+elif args.server is True:
+    main_server(SpawnerGlobal, args)
+else:
+    print("You must specify to start this as a client or server (--client or --server)")

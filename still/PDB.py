@@ -12,7 +12,7 @@ logger = logging.getLogger('PDB')
 TEST=True
 HOSTIP='10.0.1.20'
 USER='obs'
-PASSWD='P9ls4R*@'
+PASSWD='testme'
 if TEST:
     DBNAME='test'
 else:

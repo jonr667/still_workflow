@@ -9,43 +9,44 @@ MAXFAIL = 5  # Jon : move this into config
 # NEW is for db use internally.  Scheduler only ever gets UV_POT and onward from data base
 # Removing the POT_TO_USA step
 # HARDWF
-FILE_PROCESSING_STAGES = ['NEW', 'UV_POT', 'UV', 'UVC', 'CLEAN_UV', 'UVCR', 'CLEAN_UVC',
-                          'ACQUIRE_NEIGHBORS', 'UVCRE', 'NPZ', 'UVCRR', 'NPZ_POT', 'CLEAN_UVCRE', 'UVCRRE',
-                          'CLEAN_UVCRR', 'CLEAN_NPZ', 'CLEAN_NEIGHBORS', 'UVCRRE_POT', 'CLEAN_UVCRRE', 'CLEAN_UVCR',
-                          'COMPLETE']
-FILE_PROCESSING_LINKS = {}
-for i, k in enumerate(FILE_PROCESSING_STAGES[:-1]):
-    FILE_PROCESSING_LINKS[k] = FILE_PROCESSING_STAGES[i + 1]
-FILE_PROCESSING_LINKS['COMPLETE'] = None
-ENDFILE_PROCESSING_LINKS = {}
-for i, k in enumerate(FILE_PROCESSING_STAGES[:FILE_PROCESSING_STAGES.index('CLEAN_UVC')]):
-    ENDFILE_PROCESSING_LINKS[k] = FILE_PROCESSING_STAGES[i + 1]
-ENDFILE_PROCESSING_LINKS['CLEAN_UVC'] = 'CLEAN_UVCR'
-ENDFILE_PROCESSING_LINKS['CLEAN_UVCR'] = 'COMPLETE'
+# FILE_PROCESSING_STAGES = ['NEW', 'UV_POT', 'UV', 'UVC', 'CLEAN_UV', 'UVCR', 'CLEAN_UVC',
+#                           'ACQUIRE_NEIGHBORS', 'UVCRE', 'NPZ', 'UVCRR', 'NPZ_POT', 'CLEAN_UVCRE', 'UVCRRE',
+#                           'CLEAN_UVCRR', 'CLEAN_NPZ', 'CLEAN_NEIGHBORS', 'UVCRRE_POT', 'CLEAN_UVCRRE', 'CLEAN_UVCR',
+#                           'COMPLETE']
+# FILE_PROCESSING_LINKS = {}
+# for i, k in enumerate(FILE_PROCESSING_STAGES[:-1]):
+#     FILE_PROCESSING_LINKS[k] = FILE_PROCESSING_STAGES[i + 1]
+# FILE_PROCESSING_LINKS['COMPLETE'] = None
+# ENDFILE_PROCESSING_LINKS = {}
+# for i, k in enumerate(FILE_PROCESSING_STAGES[:FILE_PROCESSING_STAGES.index('CLEAN_UVC')]):
+#     ENDFILE_PROCESSING_LINKS[k] = FILE_PROCESSING_STAGES[i + 1]
+# ENDFILE_PROCESSING_LINKS['CLEAN_UVC'] = 'CLEAN_UVCR'
+# ENDFILE_PROCESSING_LINKS['CLEAN_UVCR'] = 'COMPLETE'
 
-FILE_PROCESSING_PREREQS = {  # link task to prerequisite state of neighbors, key not present assumes no prereqs
-    'ACQUIRE_NEIGHBORS': (FILE_PROCESSING_STAGES.index('UVCR'),
-                          FILE_PROCESSING_STAGES.index('CLEAN_UVCR')),
-    'CLEAN_UVCR': (FILE_PROCESSING_STAGES.index('UVCRRE'), None),
-}
+# FILE_PROCESSING_PREREQS = {  # link task to prerequisite state of neighbors, key not present assumes no prereqs
+#   'ACQUIRE_NEIGHBORS': (FILE_PROCESSING_STAGES.index('UVCR'),
+#                         FILE_PROCESSING_STAGES.index('CLEAN_UVCR')),
+#   'CLEAN_UVCR': (FILE_PROCESSING_STAGES.index('UVCRRE'), None),
+# }
 
 
 class Action:
     '''An Action performs a task on an observation, and is scheduled by a Scheduler.'''
-    def __init__(self, obs, task, neighbor_status, still, workflow, timeout=3600.):
+    def __init__(self, obs, task, neighbor_status, still, workflow, task_clients=[], timeout=3600.):
         '''f:obs, task:target status,
         neighbor_status:status of adjacent obs (do not enter a status for a non-existent neighbor
         still:still action will run on.'''
         self.obs = obs
         self.task = task
-        self.is_transfer = ''  # = (task == 'POT_TO_USA')  # XXX don't like hardcoded value here HARDWF JON: commented out POT_TO_USA part, I don't think its used anymore
+        self.is_transfer = False  # = (task == 'POT_TO_USA')  # XXX don't like hardcoded value here HARDWF JON: commented out POT_TO_USA part, I don't think its used anymore
         self.neighbor_status = neighbor_status
         self.still = still
         self.priority = 0
         self.launch_time = -1
         self.timeout = timeout
         self.wf = workflow
-
+        self.task_client = task_clients[still]
+        
     def set_priority(self, p):
         '''Assign a priority to this action.  Highest priorities are scheduled first.'''
         self.priority = p
@@ -55,7 +56,7 @@ class Action:
         We don't check that the center obs is in the prerequisite state,
         s this action could not have been generated otherwise.'''
         try:
-         x   # This whole function could still be a bit off, haven't been able to fully test it yet.
+            # This whole function could still be a bit off, haven't been able to fully test it yet.
             # Jon: I'm leaving this, it only accepting 2 at the moment but it would probably be nice to come back and clean this up
             # to support however many
             # index1, index2 = FILE_PROCESSING_PREREQS[self.task]
@@ -163,12 +164,16 @@ class Scheduler:
             # Launch actions that can be scheduled
             logger.info('launching actions')
             for still in self.launched_actions:
+                print("Still %s") % still
                 while len(self.get_launched_actions(still, tx=False)) < self.actions_per_still:
+                    print("Actions per still : %s") % self.actions_per_still
                     try:
                         a = self.pop_action_queue(still, tx=False)
                     except(IndexError):  # no actions can be taken on this still
                         # logger.info('No actions available for still-%d\n' % still)
+                        print("No actions could be taken!?")
                         break  # move on to next still
+                    print("Got here to launch_action")
                     self.launch_action(a)
                 while len(self.get_launched_actions(still, tx=True)) < self.transfers_per_still:
                     try:
@@ -182,8 +187,12 @@ class Scheduler:
 
     def pop_action_queue(self, still, tx=False):
         '''Return highest priority action for the given still.'''
+        print("My action queue: %s") % self.action_queue
         for i in xrange(len(self.action_queue)):
             a = self.action_queue[i]
+            print("Action Queue from pop_action_queue %s") % a
+            print("A.still %s, Still: %s") % (a.still, still)
+            print("A.is_transfer %s, TX: %s") % (a.is_transfer, tx)
             if a.still == still and a.is_transfer == tx:
                 return self.action_queue.pop(i)
         raise IndexError('No actions available for still-%d\n' % still)
@@ -303,6 +312,7 @@ class Scheduler:
         still = self.obs_to_still(obs)
         if ActionClass is None:
             ActionClass = Action
+        #     def __init__(self, obs, task, neighbor_status, still, workflow, timeout=3600.):
         a = ActionClass(obs, next_step, neighbor_status, still, self.wf, *action_args)
 
         if self.wf.neighbors == 1:

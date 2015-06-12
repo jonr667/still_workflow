@@ -132,7 +132,9 @@ class TaskClient:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     def _tx(self, task, obs, args):
+        print("my args : %s") % args
         logger.debug('TaskClient._tx: sending (%s,%d) with args=%s' % (task, obs, ' '.join(args)))
+        print("Host and Port in _tx: %s") % self.host_port[0]
         pkt = to_pkt(task, obs, self.host_port[0], args)
         self.sock.sendto(pkt, self.host_port)
 
@@ -163,32 +165,34 @@ class TaskClient:
         # Should move all this to the scripts themselves, this thing should just give the host,path,filename
         # Need to figure out what to do though for the AQUIRE_NEIGHBORS & CLEAN_NEIGHBORS
         # Going to use exec to handle AQUIRE_NEIGHBORS & CLEAN_NEIGHBORS etc..
-            args = {
-                'UV': [basename, '%s:%s/%s' % (pot, path, basename)],
-                'UVC': [basename],
-                'CLEAN_UV': [basename],
-                'UVCR': [basename + 'c'],
-                'CLEAN_UVC': [basename + 'c'],
-                'ACQUIRE_NEIGHBORS': ['%s:%s/%s' % (n[0], n[1], n[-1] + 'cR') for n in neighbors if n[0] != stillhost or n[1] != stillpath],
-                'UVCRE': interleave(basename + 'cR'),
-                'NPZ': [basename + 'cRE'],
-                'UVCRR': [basename + 'cR'],
-                'NPZ_POT': [basename + 'cRE.npz', '%s:%s' % (pot, path)],
-                'CLEAN_UVCRE': [basename + 'cRE'],
-                'UVCRRE': interleave(basename + 'cRR'),
-                'CLEAN_UVCRR': [basename + 'cRR'],
-                'CLEAN_NPZ': [basename + 'cRE.npz'],
-                'CLEAN_NEIGHBORS': [n[-1] + 'cR' for n in neighbors if n[0] != stillhost],
-                'UVCRRE_POT': [basename + 'cRRE', '%s:%s' % (pot,path)],
-                'CLEAN_UVCR': [basename + 'cR'],
-                'CLEAN_UVCRRE': [basename + 'cRRE'],
-                'POT_TO_USA': [pot, '%s:%s' % (outhost, outpath), '%s/%s' % (path, basename + 'cRRE'), '%s/%s' % (path, basename + 'cRE.npz')],  # XXX add destination here? if so, need to decide how dbi distinguishes between location of pot and location of usa
-                'COMPLETE': [],
-            }
-            return args[task]
+        
+        args = {
+            'UV': [basename, '%s:%s/%s' % (pot, path, basename)],
+            'UVC': [basename],
+            'CLEAN_UV': [basename],
+            'UVCR': [basename + 'c'],
+            'CLEAN_UVC': [basename + 'c'],
+            'ACQUIRE_NEIGHBORS': ['%s:%s/%s' % (n[0], n[1], n[-1] + 'cR') for n in neighbors if n[0] != stillhost or n[1] != stillpath],
+            'UVCRE': interleave(basename + 'cR'),
+            'NPZ': [basename + 'cRE'],
+            'UVCRR': [basename + 'cR'],
+            'NPZ_POT': [basename + 'cRE.npz', '%s:%s' % (pot, path)],
+            'CLEAN_UVCRE': [basename + 'cRE'],
+            'UVCRRE': interleave(basename + 'cRR'),
+            'CLEAN_UVCRR': [basename + 'cRR'],
+            'CLEAN_NPZ': [basename + 'cRE.npz'],
+            'CLEAN_NEIGHBORS': [n[-1] + 'cR' for n in neighbors if n[0] != stillhost],
+            'UVCRRE_POT': [basename + 'cRRE', '%s:%s' % (pot,path)],
+            'CLEAN_UVCR': [basename + 'cR'],
+            'CLEAN_UVCRRE': [basename + 'cRRE'],
+            'POT_TO_USA': [pot, '%s:%s' % (outhost, outpath), '%s/%s' % (path, basename + 'cRRE'), '%s/%s' % (path, basename + 'cRE.npz')],  # XXX add destination here? if so, need to decide how dbi distinguishes between location of pot and location of usa
+            'COMPLETE': [],
+        }
+        return args[task]
 
     def tx(self, task, obs):
         args = self.gen_args(task, obs)
+        print("Got here, that's exciting... Args: %s, task: %s") % (args,task)
         self._tx(task, obs, args)
 
     def tx_kill(self, obs):
@@ -202,24 +206,26 @@ class TaskClient:
 
 
 class Action(scheduler.Action):
-    def __init__(self, obs, task, neighbor_status, still, task_clients, timeout=3600.):
-        scheduler.Action.__init__(self, obs, task, neighbor_status, still, timeout=timeout)
-        self.task_client = task_clients[still]
+#    def __init__(self, obs, task, neighbor_status, still, task_clients, timeout=3600.):
+#        scheduler.Action.__init__(self, obs, task, neighbor_status, still, timeout=timeout)
+#        self.task_client = task_clients[still]
 
     def _command(self):
         logger.debug('Action: task_client(%s,%d)' % (self.task, self.obs))
         self.task_client.tx(self.task, self.obs)
 
-
-class Scheduler(scheduler.Scheduler):
-    def __init__(self, task_clients, workflow, actions_per_still=8, blocksize=10):
-        scheduler.Scheduler.__init__(self, nstills=len(task_clients), actions_per_still=actions_per_still, blocksize=blocksize)
-        self.task_clients = task_clients
-
-    def kill_action(self, a):
-        scheduler.Scheduler.kill_action(self, a)
-        still = self.obs_to_still(a.obs)
-        self.task_clients[still].tx_kill(a.obs)
+# Jon : I don't think we need to handle this in this way, I added the self.task_clients to the normal class.
+#       If this is needed it might be wroth just renaming it something other than Scheduler or something that
+#       imports this file and scheduler.py can get conflicts.
+# class Scheduler(scheduler.Scheduler):
+#     def __init__(self, task_clients, workflow, actions_per_still=8, blocksize=10):
+#         scheduler.Scheduler.__init__(self, nstills=len(task_clients), actions_per_still=actions_per_still, blocksize=blocksize)
+#         self.task_clients = task_clients
+# Jon : Bring back kill action
+#     def kill_action(self, a):
+#         scheduler.Scheduler.kill_action(self, a)
+#         still = self.obs_to_still(a.obs)
+#         self.task_clients[still].tx_kill(a.obs)
 
 
 class TaskHandler(SocketServer.BaseRequestHandler):
@@ -241,7 +247,7 @@ class TaskHandler(SocketServer.BaseRequestHandler):
         logger.info('TaskHandler.handle: received (%s,%d) with args=%s' % (task, obs, ' '.join(args)))
         if task == 'KILL':
             self.server.kill(int(args[0]))  # TODO I THINK THIS IS WHERE WE HAVE A PROBLE. RUN and maybe COMPLETE need to clean up existing threads.
-        elif task == 'COMPLETE': # HARDWF
+        elif task == 'COMPLETE':  # HARDWF
             self.server.dbi.set_obs_status(obs, task)
         else:
             t = Task(task, obs, still, args, self.server.dbi, self.server.data_dir)
