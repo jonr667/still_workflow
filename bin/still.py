@@ -173,7 +173,6 @@ def main_server(sg):
 parser = argparse.ArgumentParser(description='Process MWA data.')
 
 SpawnerGlobal = SpawnerClass()
-
 workflow_objects = WorkFlow()
 
 # Probably accept config file location and maybe config file section as command line arguments
@@ -190,14 +189,11 @@ parser.add_argument('--config_file', dest='config_file', required=False,
                     help="Specify the complete path to the config file")
 
 
-parser.set_defaults(config_file="%setc/still.cfg" % basedir) 
+parser.set_defaults(config_file="%setc/still.cfg" % basedir)
 
 
 args, unknown = parser.parse_known_args()
-
 SpawnerGlobal.config_file = args.config_file
-# args.client = True  # For testing
-
 process_client_config_file(SpawnerGlobal, workflow_objects)
 SpawnerGlobal.db = MWADataBaseInterface(test=False, configfile=SpawnerGlobal.config_file)
 
