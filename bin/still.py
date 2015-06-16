@@ -5,18 +5,20 @@ import configparser
 import os
 import sys
 
-#  Setup the lib path as a spot to check for python libraries
+#  Setup the lib path ./lib/  as a spot to check for python libraries
 basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
 sys.path.append(basedir + 'lib')
 print basedir
 
-from dbi import DataBaseInterface, Observation, logger
+import add_observations
+
+from dbi import DataBaseInterface
+from dbi import Observation
+from dbi import logger
 from scheduler import Scheduler
 from task_server import TaskServer
 from task_server import TaskClient
 from task_server import Action
-# from still.task_server import TaskClient
-
 
 
 class WorkFlow:
@@ -40,11 +42,24 @@ class SpawnerClass:
     #
     def __init__(self):
         self.data = []
+        self.dbname = ''
+        self.dbpasswd = ''
+        self.dbtype = ''
+        self.dbhost = ''
+        self.dbport = 0
+        self.dbuser = ''
         self.config_file = ''
         self.config_name = ''
+        self.data_dir = ''
+        self.hosts = []
+        self.port = 14204
+        self.actions_per_still = 8
+        self.timeout = 60
+        self.sleep_time = 10
+        self.block_size = 10
 
 
-class MWAScheduler(Scheduler):
+class StillScheduler(Scheduler):
     #
     # Overload Scheduler class from still to be able to modify some functions
     #
@@ -59,7 +74,7 @@ class MWAScheduler(Scheduler):
         return
 
 
-class MWADataBaseInterface(DataBaseInterface):
+class StillDataBaseInterface(DataBaseInterface):
     #
     # Overload DataBaseInterface class from still to be able to modify some functions
     #
@@ -103,6 +118,30 @@ def process_client_config_file(sg, wf):
         workflow_actions_endfile = workflow['actions_endfile'].replace(" ", "").split(",")
         wf.workflow_actions_endfile = tuple(workflow_actions_endfile)
 
+        if config.has_option('dbinfo', 'dbhost'):
+            sg.dbhost = config.get('dbinfo', 'dbhost').replace(" ", "")
+        if config.has_option('dbinfo', 'dbport'):
+            sg.dbport = int(config.get('dbinfo', 'dbport'))
+        if config.has_option('dbinfo', 'dbtype'):
+            sg.dbtype = config.get('dbinfo', 'dbtype').replace(" ", "")
+        if config.has_option('dbinfo', 'dbuser'):
+            sg.dbuser = config.get('dbinfo', 'dbuser').replace(" ", "")
+        if config.has_option('dbinfo', 'dbpasswd'):
+            sg.dbpasswd = config.get('dbinfo', 'dbpasswd').replace(" ", "")
+        if config.has_option('dbinfo', 'dbname'):
+            sg.dbname = config.get('dbinfo', 'dbname').replace(" ", "")
+
+        if config.has_option('Still', 'hosts'):
+            sg.hosts = config.get('Still', 'hosts').replace(" ", "").split(",")
+        if config.has_option('Still', 'port'):
+            sg.port = int(config.get('Still', 'port'))
+        if config.has_option('Still', 'data_dir'):
+            sg.data_dir = config.get('Still', 'data_dir')
+        if config.has_option('Still', 'timeout'):
+            sg.timeout = int(config.get('Still', 'timeout'))
+        if config.has_option('Still', 'block_size'):
+            sg.block_size = int(config.get('Still', 'block_size'))
+
         if config.has_option('WorkFlow', 'prioritize_obs'):
             wf.prioritize_obs = int(config.get('WorkFlow', 'prioritize_obs'))
         if config.has_option('WorkFlow', 'neighbors'):
@@ -136,24 +175,23 @@ def main_client(sg, wf, args):
     except:
         print("We could not run a test on the database and are aborting.  Please check the DBI DB config")
         sys.exit(1)
+ #   add_observations.ingest_addtional_opsids(sg)
+#    obsid = 1062453568
+#    add_observations.get_all_nags_files_for_obsid(sg, obsid)
+    #    sync_new_ops_from_ngas_to_still(sg)  # Lets get started and get a batch of new observations and push them into the db
+ #   sys.exit(0)
+    STILLS = sg.hosts
 
-#    sync_new_ops_from_ngas_to_still(sg)  # Lets get started and get a batch of new observations and push them into the db
-#    sys.exit(0)
+    ACTIONS_PER_STILL = sg.actions_per_still  # how many actions that run in parallel on a still
+    BLOCK_SIZE = sg.block_size  # number of files that are sent together to a still
+    TIMEOUT = sg.timeout  # seconds; how long a task is allowed to be running before it is assumed to have failed
+    SLEEPTIME = sg.sleep_time  # seconds; throttle on how often the scheduler polls the database
 
-    # Will probably want to crank the sleep time up a bit in the future....
+    task_clients = [TaskClient(sg.db, s, wf, port=sg.port) for s in STILLS]
+    myscheduler = StillScheduler(task_clients, wf, actions_per_still=ACTIONS_PER_STILL, blocksize=BLOCK_SIZE, nstills=len(STILLS))  # Init scheduler daemon
 
-    # Throwing this in temporarily for testing, will put in config file as soon as I know its working.
-    STILLS = ['localhost']
-    PORTS = [14204]
-    ACTIONS_PER_STILL = 8  # how many actions that run in parallel on a still
-    BLOCK_SIZE = 10  # number of files that are sent together to a still
-    TIMEOUT = 600  # seconds; how long a task is allowed to be running before it is assumed to have failed
-    SLEEPTIME = 10.  # seconds; throttle on how often the scheduler polls the database
-
-    task_clients = [TaskClient(sg.db, s, wf, port=p) for (s, p) in zip(STILLS, PORTS)]
-
-    myscheduler = MWAScheduler(task_clients, wf, actions_per_still=ACTIONS_PER_STILL, blocksize=BLOCK_SIZE, nstills=len(STILLS))  # Init scheduler daemon
     myscheduler.start(dbi=sg.db, ActionClass=Action, action_args=(task_clients, TIMEOUT), sleeptime=SLEEPTIME)
+
     return 0
 
 
@@ -162,7 +200,7 @@ def main_server(sg):
     # Instantiate a still server instance
     #
 
-    task_server = TaskServer(sg.db, data_dir="/Users/wintermute/data", port=14204)
+    task_server = TaskServer(sg.db, data_dir=sg.data_dir, port=14204)
     task_server.start()
     return
 
@@ -170,9 +208,9 @@ def main_server(sg):
 # Mostly placeholder stuff for reading in command line aruments
 #
 
-parser = argparse.ArgumentParser(description='Process MWA data.')
+parser = argparse.ArgumentParser(description='Process STILL data.')
 
-SpawnerGlobal = SpawnerClass()
+sg = SpawnerClass()
 workflow_objects = WorkFlow()
 
 # Probably accept config file location and maybe config file section as command line arguments
@@ -193,13 +231,15 @@ parser.set_defaults(config_file="%setc/still.cfg" % basedir)
 
 
 args, unknown = parser.parse_known_args()
-SpawnerGlobal.config_file = args.config_file
-process_client_config_file(SpawnerGlobal, workflow_objects)
-SpawnerGlobal.db = MWADataBaseInterface(test=False, configfile=SpawnerGlobal.config_file)
+sg.config_file = args.config_file
+process_client_config_file(sg, workflow_objects)
+#    def __init__(self, dbhost, dbport, dbtype, dbname, dbuser, dbpasswd, test=False):
+
+sg.db = StillDataBaseInterface(sg.dbhost, sg.dbport, sg.dbtype, sg.dbname, sg.dbuser, sg.dbpasswd, test=False)
 
 if args.client is True:
-    main_client(SpawnerGlobal, workflow_objects, args)
+    main_client(sg, workflow_objects, args)
 elif args.server is True:
-    main_server(SpawnerGlobal)
+    main_server(sg)
 else:
     print("You must specify to start this as a client or server (--client or --server)")

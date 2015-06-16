@@ -2,8 +2,6 @@ import os
 import sys
 import logging
 import hashlib
-import configparser
-# import numpy as n
 
 from subprocess import Popen, PIPE
 
@@ -15,24 +13,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 # from sqlalchemy.pool import QueuePool
 
-# Jon added this for some testing and it needs to be removed
-
-# from still.scheduler import FILE_PROCESSING_STAGES
-
-# Uncomment the following line after you hose Jon's stuff above
-# from ddr_compress.scheduler import FILE_PROCESSING_STAGES
 
 # Based on example here: http://www.pythoncentral.io/overview-sqlalchemys-expression-language-orm-queries/
 Base = declarative_base()
 
 # Jon : Not sure why the logger is defined here?
 logger = logging.getLogger('dbi')
-
-# dbinfo = {'username':'obs',
-#          'password':'',
-#          'hostip':'qmaster',
-#          'port':3306,
-#          'dbname':'test'}
 
 
 #########
@@ -47,10 +33,10 @@ def jdpol2obsnum(jd, pol, djd):
     """
     import aipy as a
     dublinjd = jd - 2415020  # use Dublin Julian Date
-    obsint = int(dublinjd/djd)  # divide up by length of obs
-    polnum = a.miriad.str2pol[pol]+10
-    assert(obsint < 2**31)
-    return int(obsint + polnum*(2**32))
+    obsint = int(dublinjd / djd)  # divide up by length of obs
+    polnum = a.miriad.str2pol[pol] + 10
+    assert(obsint < 2 ** 31)
+    return int(obsint + polnum * (2 ** 32))
 
 
 def updateobsnum(context):
@@ -162,47 +148,32 @@ class Cal(Base):
 
 
 class DataBaseInterface(object):
-    def __init__(self, configfile='~/.ddr_compress/still.cfg', test=False):
+    def __init__(self, dbhost, dbport, dbtype, dbname, dbuser, dbpasswd, test=False):
         """
         Connect to the database and initiate a session creator.
          or
         create a FALSE database
-
-        db.cfg is the default setup. Config files live in ddr_compress/configs
-        To use a config file, copy the desired file ~/.paperstill/db.cfg
         """
-        if configfile is not None:
-            config = configparser.ConfigParser()
-            configfile = os.path.expanduser(configfile)
-            if os.path.exists(configfile):
-                logger.info('loading file ' + configfile)
-                config.read(configfile)
-                self.dbinfo = config['dbinfo']
-                # .decode is not needed in python 3
-                # self.dbinfo['password'] = self.dbinfo['password'].decode('string-escape')
-            else:
-                logging.info(configfile + " Not Found")
         if test:
-            self.engine = create_engine('sqlite:///',
-                                        connect_args={'check_same_thread': False},
-                                        poolclass=StaticPool)
+            self.engine = create_engine('sqlite:///', connect_args={'check_same_thread': False}, poolclass=StaticPool)
             self.createdb()
-        else:
-            if self.dbinfo['dbtype'] == 'postgresql':
+        elif dbtype == 'postgresql':
                 try:
-                    print(self.dbinfo['password'])
-                    self.engine = create_engine(
-                        'postgresql+psycopg2://{username}:{password}@{hostip}:{port}/{dbname}'.format(**self.dbinfo), echo=False)  # Set echo=True to Enable debug mode
+                    self.engine = create_engine('postgresql+psycopg2://{0}:{1}@{2}:{3}/{4}'.format(dbuser, dbpasswd, dbhost, dbport, dbname), echo=False)  # Set echo=True to Enable debug mode
                 except:
                     print("Could not connect to the postgresql database.")
                     sys.exit(1)
-            else:
-                self.engine = create_engine(
-                    'mysql://{username}:{password}@{hostip}:{port}/{dbname}'.format(
-                                **self.dbinfo),
-                    pool_size=20,
-                    max_overflow=40)
-        self.Session = sessionmaker(bind=self.engine)
+        elif dbtype == 'mysql':
+            try:
+                self.engine = create_engine('mysql://{0}:{1}@{2}:{3}/{4}'.format(dbuser, dbpasswd, dbhost, dbport, dbname), pool_size=20, max_overflow=40)
+            except:
+                print("Could not connect to the postgresql database.")
+                sys.exit(1)
+        try:
+            self.Session = sessionmaker(bind=self.engine)
+        except:
+            print("Could not create database binding, please check database settings")
+            sys.exit(1)
 
     def test_db(self):
         tables = Base.metadata.tables.keys()

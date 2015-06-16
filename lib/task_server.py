@@ -12,6 +12,7 @@ STILL_PORT = 14204
 
 
 def pad(s, line_len=PKT_LINE_LEN):
+
     return (s + ' ' * line_len)[:line_len]
 
 
