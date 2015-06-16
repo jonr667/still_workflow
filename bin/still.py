@@ -4,12 +4,19 @@ import argparse
 import configparser
 import os
 import sys
-import numpy as np
-from still.dbi import DataBaseInterface, Observation, logger
-from still.scheduler import Scheduler
-from still.task_server import TaskServer
+
+#  Setup the lib path as a spot to check for python libraries
+basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
+sys.path.append(basedir + 'lib')
+print basedir
+
+from dbi import DataBaseInterface, Observation, logger
+from scheduler import Scheduler
+from task_server import TaskServer
+from task_server import TaskClient
+from task_server import Action
 # from still.task_server import TaskClient
-import still.task_server
+
 
 
 class WorkFlow:
@@ -143,10 +150,10 @@ def main_client(sg, wf, args):
     TIMEOUT = 600  # seconds; how long a task is allowed to be running before it is assumed to have failed
     SLEEPTIME = 10.  # seconds; throttle on how often the scheduler polls the database
 
-    task_clients = [still.task_server.TaskClient(sg.db, s, wf, port=p) for (s, p) in zip(STILLS, PORTS)]
+    task_clients = [TaskClient(sg.db, s, wf, port=p) for (s, p) in zip(STILLS, PORTS)]
 
     myscheduler = MWAScheduler(task_clients, wf, actions_per_still=ACTIONS_PER_STILL, blocksize=BLOCK_SIZE, nstills=len(STILLS))  # Init scheduler daemon
-    myscheduler.start(dbi=sg.db, ActionClass=still.task_server.Action, action_args=(task_clients, TIMEOUT), sleeptime=SLEEPTIME)
+    myscheduler.start(dbi=sg.db, ActionClass=Action, action_args=(task_clients, TIMEOUT), sleeptime=SLEEPTIME)
     return 0
 
 
@@ -183,7 +190,7 @@ parser.add_argument('--config_file', dest='config_file', required=False,
                     help="Specify the complete path to the config file")
 
 
-parser.set_defaults(config_file='./cotter_still.cfg')
+parser.set_defaults(config_file="%setc/still.cfg" % basedir) 
 
 
 args, unknown = parser.parse_known_args()
