@@ -2,6 +2,7 @@ import SocketServer
 import logging, threading, subprocess, time
 import socket, os,tempfile,psutil
 import scheduler
+import sys
 
 logger = logging.getLogger('taskserver')
 logger.setLevel(logging.DEBUG)
@@ -60,7 +61,7 @@ class Task:
         self.OUTFILE = tempfile.TemporaryFile()
         self.outfile_counter = 0
         try:
-            process = psutil.Popen(['do_%s.sh' % self.task] + self.args, cwd=self.cwd, stderr=self.OUTFILE, stdout=self.OUTFILE)
+            process = psutil.Popen(['/Users/wintermute/mwa_pipeline/scripts/do_%s.sh' % self.task] + self.args, cwd=self.cwd, stderr=self.OUTFILE, stdout=self.OUTFILE)
             process.cpu_affinity(range(psutil.cpu_count()))
             self.dbi.add_log(self.obs, self.task, ' '.join(['do_%s.sh' % self.task] + self.args + ['\n']), None)
         except Exception, e:
@@ -126,10 +127,11 @@ class Task:
 
 
 class TaskClient:
-    def __init__(self, dbi, host, port=STILL_PORT):
+    def __init__(self, dbi, host, workflow, port=STILL_PORT):
         self.dbi = dbi
         self.host_port = (host, port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.wf = workflow
 
     def _tx(self, task, obs, args):
         print("my args : %s") % args
@@ -161,38 +163,18 @@ class TaskClient:
                 rv = rv + [neighbors_base[1] + appendage]
             return rv
 
-        # Jon: HARDWF
-        # Should move all this to the scripts themselves, this thing should just give the host,path,filename
-        # Need to figure out what to do though for the AQUIRE_NEIGHBORS & CLEAN_NEIGHBORS
-        # Going to use exec to handle AQUIRE_NEIGHBORS & CLEAN_NEIGHBORS etc..
-        
-        args = {
-            'UV': [basename, '%s:%s/%s' % (pot, path, basename)],
-            'UVC': [basename],
-            'CLEAN_UV': [basename],
-            'UVCR': [basename + 'c'],
-            'CLEAN_UVC': [basename + 'c'],
-            'ACQUIRE_NEIGHBORS': ['%s:%s/%s' % (n[0], n[1], n[-1] + 'cR') for n in neighbors if n[0] != stillhost or n[1] != stillpath],
-            'UVCRE': interleave(basename + 'cR'),
-            'NPZ': [basename + 'cRE'],
-            'UVCRR': [basename + 'cR'],
-            'NPZ_POT': [basename + 'cRE.npz', '%s:%s' % (pot, path)],
-            'CLEAN_UVCRE': [basename + 'cRE'],
-            'UVCRRE': interleave(basename + 'cRR'),
-            'CLEAN_UVCRR': [basename + 'cRR'],
-            'CLEAN_NPZ': [basename + 'cRE.npz'],
-            'CLEAN_NEIGHBORS': [n[-1] + 'cR' for n in neighbors if n[0] != stillhost],
-            'UVCRRE_POT': [basename + 'cRRE', '%s:%s' % (pot,path)],
-            'CLEAN_UVCR': [basename + 'cR'],
-            'CLEAN_UVCRRE': [basename + 'cRRE'],
-            'POT_TO_USA': [pot, '%s:%s' % (outhost, outpath), '%s/%s' % (path, basename + 'cRRE'), '%s/%s' % (path, basename + 'cRE.npz')],  # XXX add destination here? if so, need to decide how dbi distinguishes between location of pot and location of usa
-            'COMPLETE': [],
-        }
-        return args[task]
+        try:
+            args = eval(self.wf.action_args[task])
+        except:
+            print("Could not process arguments for task %s please check args for this task in config file") % task
+            sys.exit(1)
+        print("My Args!!! : %s") % args
+
+        return args
 
     def tx(self, task, obs):
         args = self.gen_args(task, obs)
-        print("Got here, that's exciting... Args: %s, task: %s") % (args,task)
+        print("Got here, that's exciting... Args: %s, task: %s") % (args, task)
         self._tx(task, obs, args)
 
     def tx_kill(self, obs):

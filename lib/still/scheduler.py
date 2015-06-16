@@ -46,7 +46,7 @@ class Action:
         self.timeout = timeout
         self.wf = workflow
         self.task_client = task_clients[still]
-        
+
     def set_priority(self, p):
         '''Assign a priority to this action.  Highest priorities are scheduled first.'''
         self.priority = p
