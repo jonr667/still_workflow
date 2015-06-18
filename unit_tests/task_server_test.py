@@ -85,7 +85,7 @@ class TestFunctions(unittest.TestCase):
         self.assertEqual(len(ts.pad('abc' * 10, 30)), 30)
 
     def test_to_pkt(self):
-        pkt = ts.to_pkt('UV', 5, 'still', ['1', '2', '3'])
+        pkt = ts.to_pkt('UV', 5, 'still', ['1', '2', '3'])  # Jon : HARDWF
         self.assertEqual(len(pkt), 7 * ts.PKT_LINE_LEN)
         self.assertEqual(pkt[:ts.PKT_LINE_LEN], ts.pad('7'))
 
@@ -98,7 +98,7 @@ class TestFunctions(unittest.TestCase):
         self.assertEqual(args, ['1'])
 
     def test_to_from_pkt(self):
-        pkt = ts.to_pkt('UV', 5, 'still', ['1', '2', '3'])
+        pkt = ts.to_pkt('UV', 5, 'still', ['1', '2', '3'])  # Jon : HARDWF
         task, obs, still, args = ts.from_pkt(pkt)
         self.assertEqual(task, 'UV')  # Jon : HARDWF
         self.assertEqual(obs, 5)
@@ -185,11 +185,13 @@ class TestTaskServer(unittest.TestCase):
         s = ts.TaskServer(self.dbi, handler=SleepHandler)
         thd = threading.Thread(target=s.start)
         thd.start()
+        print("Still port %s") % ts.STILL_PORT
         try:
             self.assertEqual(len(s.active_tasks), 0)
             self.assertEqual(self.var, 0)
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.sendto('test', ('localhost', ts.STILL_PORT))
+
             while self.var != 1:
                 time.sleep(.1)
             self.assertEqual(self.var, 1)

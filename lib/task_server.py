@@ -1,6 +1,12 @@
 import SocketServer
-import logging, threading, subprocess, time
-import socket, os,tempfile,psutil
+import logging
+import threading
+import subprocess
+import time
+import socket
+import os
+import tempfile
+import psutil
 import scheduler
 import sys
 
@@ -107,7 +113,7 @@ class Task:
     def kill(self):
         self.record_failure()
         logger.debug('Task.kill Trying to kill: ({task},{obsnum}) pid={pid}'.format(task=self.task, obsnum=self.obs, pid=self.process.pid))
-        logger.debug('Task.kill Killing {n} children to prevent orphans: ({task},{obsnum})'.format(n=len(self.process.children(recursive=True)), task=self.task, obsnum=self.obs))
+#        logger.debug('Task.kill Killing {n} children to prevent orphans: ({task},{obsnum})'.format(n=len(self.process.children(recursive=True)), task=self.task, obsnum=self.obs))
         for child in self.process.children(recursive=True):
             child.kill()
         logger.debug('Task.kill Killing shell script: ({task},{obsnum})'.format(task=self.task, obsnum=self.obs))
@@ -249,6 +255,7 @@ class TaskServer(SocketServer.UDPServer):
         self.data_dir = data_dir
         self.is_running = False
         self.watchdog_count = 0
+        self.port = port
 
     def append_task(self, t):
         self.active_tasks_semaphore.acquire()
