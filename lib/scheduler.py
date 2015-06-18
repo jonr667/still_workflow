@@ -266,6 +266,7 @@ class Scheduler:
         '''Based on the current list of active obs (which you might want
         to update first), generate a prioritized list of actions that
         can be taken.'''
+        # Jon : We should look into using db filters here instead of these loops
         failed = dbi.get_terminal_obs()
         actions = [self.get_action(dbi, f, ActionClass=ActionClass, action_args=action_args) for f in self.active_obs]
         actions = [a for a in actions if a is not None]  # remove unactionables

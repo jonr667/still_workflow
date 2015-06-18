@@ -115,8 +115,9 @@ def process_client_config_file(sg, wf):
         workflow = config['WorkFlow']  # Get workflow actions
         workflow_actions = workflow['actions'].replace(" ", "").split(",")
         wf.workflow_actions = tuple(workflow_actions)  # Get all the workflow actions and put them in a nice immutible tuple
-        workflow_actions_endfile = workflow['actions_endfile'].replace(" ", "").split(",")
-        wf.workflow_actions_endfile = tuple(workflow_actions_endfile)
+        if config.has_option('workflow', 'actions_endfile'):
+            workflow_actions_endfile = workflow['actions_endfile'].replace(" ", "").split(",")
+            wf.workflow_actions_endfile = tuple(workflow_actions_endfile)
 
         if config.has_option('dbinfo', 'dbhost'):
             sg.dbhost = config.get('dbinfo', 'dbhost').replace(" ", "")
@@ -204,11 +205,6 @@ def main_server(sg):
     task_server.start()
     return
 
-#
-# Mostly placeholder stuff for reading in command line aruments
-#
-
-parser = argparse.ArgumentParser(description='Process STILL data.')
 
 sg = SpawnerClass()
 workflow_objects = WorkFlow()
@@ -216,7 +212,7 @@ workflow_objects = WorkFlow()
 # Probably accept config file location and maybe config file section as command line arguments
 # for the moment this is mostly just placeholder stuffs
 
-parser = argparse.ArgumentParser(description='Process raw array data and cotterize the heck out of it')
+parser = argparse.ArgumentParser(description='STILL workflow management software')
 parser.add_argument('--init', dest='init', action='store_true',
                     help='Initialize the database if this is the first time running this')
 parser.add_argument('--server', dest='server', action='store_true',
@@ -233,8 +229,8 @@ parser.set_defaults(config_file="%setc/still.cfg" % basedir)
 args, unknown = parser.parse_known_args()
 sg.config_file = args.config_file
 process_client_config_file(sg, workflow_objects)
-#    def __init__(self, dbhost, dbport, dbtype, dbname, dbuser, dbpasswd, test=False):
 
+# Create database interface with SQL Alchemy
 sg.db = StillDataBaseInterface(sg.dbhost, sg.dbport, sg.dbtype, sg.dbname, sg.dbuser, sg.dbpasswd, test=False)
 
 if args.client is True:
