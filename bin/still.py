@@ -8,7 +8,6 @@ import sys
 #  Setup the lib path ./lib/  as a spot to check for python libraries
 basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
 sys.path.append(basedir + 'lib')
-print basedir
 
 import add_observations
 
