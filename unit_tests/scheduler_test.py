@@ -36,9 +36,9 @@ class FakeDataBaseInterface:
 
     def get_neighbors(self, obsnum):
         n1, n2 = obsnum - 1, obsnum + 1
-        if not self.files.has_key(n1):
+        if n1 in self.files:
             n1 = None
-        if not self.files.has_key(n2):
+        if n2 in self.files:
             n2 = None
         return (n1, n2)
 

@@ -158,9 +158,9 @@ class TestDBI(unittest.TestCase):
             # find the original record we put into add_observations and check that the neighbors match
             for obs in obslist:
                 if float(obs['date']) == float(OBS.date):
-                    if obs.has_key('neighbor_low'):
+                    if 'neighbor_low' in obs:
                         self.assertEqual(float(OBS.low_neighbors[0].date), obs['neighbor_low'])
-                    if obs.has_key('neighbor_high'):
+                    if 'neighbor_high' in obs:
                         self.assertEqual(float(OBS.high_neighbors[0].date), obs['neighbor_high'])
                     break
 
