@@ -1,0 +1,2 @@
+MDLVIS: created file.
+MDLVIS: /usr/local/bin/mdlvis.py -a all -C psa898_v003 -s sgr,cyg,for,pic,crab -m sim -n 100 --nchan=1024 --sfreq=.100 --sdf=9.765625e-05 --inttime=10.7 --startjd=2456892.20012 --endjd=2456892.20706 --pol=xx
