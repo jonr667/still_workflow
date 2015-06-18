@@ -29,7 +29,7 @@ class FakeDataBaseInterface:
         self.stills = {}
         self.paths = {}
         for i in xrange(nfiles):
-            self.files[i] = 'UV_POT'
+            self.files[i] = 'UV_POT'  # Jon : HARDWF
             self.pids[i] = -1
             self.stills[i] = 'localhost'
             self.paths[i] = os.path.abspath('.')
@@ -90,9 +90,9 @@ class TestFunctions(unittest.TestCase):
         self.assertEqual(pkt[:ts.PKT_LINE_LEN], ts.pad('7'))
 
     def test_from_pkt(self):
-        pkt = ts.pad('5') + ts.pad('UV') + ts.pad('4') + ts.pad('still') + ts.pad('1')
+        pkt = ts.pad('5') + ts.pad('UV') + ts.pad('4') + ts.pad('still') + ts.pad('1')  # Jon : HARDWF
         task, obs, still, args = ts.from_pkt(pkt)
-        self.assertEqual(task, 'UV')
+        self.assertEqual(task, 'UV')  # Jon : HARDWF
         self.assertEqual(obs, 4)
         self.assertEqual(still, 'still')
         self.assertEqual(args, ['1'])
@@ -100,7 +100,7 @@ class TestFunctions(unittest.TestCase):
     def test_to_from_pkt(self):
         pkt = ts.to_pkt('UV', 5, 'still', ['1', '2', '3'])
         task, obs, still, args = ts.from_pkt(pkt)
-        self.assertEqual(task, 'UV')
+        self.assertEqual(task, 'UV')  # Jon : HARDWF
         self.assertEqual(obs, 5)
         self.assertEqual(still, 'still')
         self.assertEqual(args, ['1', '2', '3'])
@@ -119,19 +119,19 @@ class TestTask(unittest.TestCase):
 
     def test_run(self):
         dbi = FakeDataBaseInterface()
-        t = self.VarTask('UV', 1, 'still', ['filename'], dbi)
+        t = self.VarTask('UV', 1, 'still', ['filename'], dbi)  # Jon : HARDWF
         self.assertEqual(t.process, None)
         var = self.var
         t.run()
         self.assertEqual(self.var, var + 1)
         self.assertTrue(type(t.process) is subprocess.Popen)
         t.finalize()
-        self.assertEqual(dbi.get_obs_status(1), 'UV')
+        self.assertEqual(dbi.get_obs_status(1), 'UV')  # Jon : HARDWF
         self.assertRaises(RuntimeError, t.run)
 
     def test_kill(self):
         dbi = FakeDataBaseInterface()
-        t = SleepTask('UV', 1, 'still', [], dbi)
+        t = SleepTask('UV', 1, 'still', [], dbi)  # Jon : HARDWF
         start_t = time.time()
         t.run()
         t.kill()
@@ -149,7 +149,7 @@ class TestTaskServer(unittest.TestCase):
 
     def test_basics(self):
         s = ts.TaskServer(self.dbi)
-        t = SleepTask('UV', 1, 'still', [], self.dbi)
+        t = SleepTask('UV', 1, 'still', [], self.dbi)  # Jon : HARDWF
         s.append_task(t)
         self.assertEqual(len(s.active_tasks), 1)
         t.run()
@@ -253,7 +253,7 @@ class TestTaskClient(unittest.TestCase):
 
     def test_gen_args(self):
         tc = ts.TaskClient(self.dbi, 'localhost')
-        for task in sch.FILE_PROCESSING_STAGES[2:-1]:
+        for task in sch.FILE_PROCESSING_STAGES[2:-1]:  # Jon : FIXME : HARDWF
             args = tc.gen_args(task, 2)
             if task in ['UVCRE', 'UVCRRE']:  # Jon : HARDWF
                 self.assertEqual(len(args), 3)
@@ -277,7 +277,7 @@ class TestTaskClient(unittest.TestCase):
         thd.start()
         try:
             tc = ts.TaskClient(self.dbi, 'localhost')
-            tc.tx('UV', 1)
+            tc.tx('UV', 1)  # Jon : HARDWF
         finally:
             s.shutdown()
             thd.join()
