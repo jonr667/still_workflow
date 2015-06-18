@@ -77,19 +77,23 @@ def gethostname():
 ########
 
 neighbors = Table("neighbors", Base.metadata,
-                  Column("low_neighbor_id", BigInteger, ForeignKey("observation.obsnum"), primary_key=True),
-                  Column("high_neighbor_id", BigInteger, ForeignKey("observation.obsnum"), primary_key=True)
+                  # Column("low_neighbor_id", BigInteger, ForeignKey("observation.obsnum"), primary_key=True),
+                  # Column("high_neighbor_id", BigInteger, ForeignKey("observation.obsnum"), primary_key=True)
+                  Column("low_neighbor_id", String(100), ForeignKey("observation.obsnum"), primary_key=True),
+                  Column("high_neighbor_id", String(100), ForeignKey("observation.obsnum"), primary_key=True)
                   )
 
 
 class Observation(Base):
     __tablename__ = 'observation'
-    date = Column(BigInteger)  # Jon: Changed this to a biginteger for now... Though I can probably just pad my date
+    # date = Column(BigInteger)  # Jon: Changed this to a biginteger for now... Though I can probably just pad my date
+    date = Column(String(100))  # Jon: Changed this to a biginteger for now... Though I can probably just pad my date
     date_type = Column(String(100))
     pol = Column(String(4))
     # JON: removed default=updateobsnum, late, should figure out how to just override the alchamy base class thinggie.
     # obsnum = Column(BigInteger, default=updateobsnum, primary_key=True)
-    obsnum = Column(BigInteger, primary_key=True)
+    # obsnum = Column(BigInteger, primary_key=True)
+    obsnum = Column(String(100), primary_key=True)
     # status = Column(Enum(*FILE_PROCESSING_STAGES, name='FILE_PROCESSING_STAGES'))
     # Jon: There may be a very good reason to not just make this a string and I'm sure I will find out what it is soon enough
     status = Column(String(200))
@@ -112,7 +116,8 @@ class File(Base):
     filenum = Column(Integer, primary_key=True)
     filename = Column(String(200))
     host = Column(String(100))
-    obsnum = Column(BigInteger, ForeignKey('observation.obsnum'))
+    # obsnum = Column(BigInteger, ForeignKey('observation.obsnum'))
+    obsnum = Column(String(100), ForeignKey('observation.obsnum'))
     # this next line creates an attribute Observation.files which is the list of all
     #  files associated with this observation
     observation = relationship(Observation, backref=backref('files', uselist=True))
@@ -123,6 +128,7 @@ class Log(Base):
     __tablename__ = 'log'
     lognum = Column(Integer, primary_key=True)
     obsnum = Column(BigInteger, ForeignKey('observation.obsnum'))
+    obsnum = Column(String(100), ForeignKey('observation.obsnum'))
     # Jon: There may be a very good reason to not just make this a string and I'm sure I will find out what it is soon enough
     stage = Column(String(200))
     # stage = Column(Enum(*FILE_PROCESSING_STAGES, name='FILE_PROCESSING_STAGES'))
@@ -137,7 +143,8 @@ class Log(Base):
 class Cal(Base):
     __tablename__ = 'cal'
     calnum = Column(Integer, primary_key=True)
-    obsnum = Column(BigInteger, ForeignKey('observation.obsnum'))
+    # obsnum = Column(BigInteger, ForeignKey('observation.obsnum'))
+    obsnum = Column(String(100), ForeignKey('observation.obsnum'))
     last_activity = Column(DateTime, nullable=False, default=func.current_timestamp())
     cal_date = Column(DateTime)
     calfile = Column(Text)
@@ -290,14 +297,13 @@ class DataBaseInterface(object):
         s.close()
         return FAILED_OBSNUMS
 
-    def add_observation(self, date, date_type, pol, filename, host, length=10 / 60. / 24, status='UV_POT'):
+    def add_observation(self, obsnum, date, date_type, pol, filename, host, length=10 / 60. / 24, status='UV_POT'):
         """
         create a new observation entry.
         returns: obsnum  (see jdpol2obsnum)
         Note: does not link up neighbors!
         """
-        OBS = Observation(date=date, date_type=date_type, pol=pol, status=status, length=length)
-        print(OBS)
+        OBS = Observation(obsnum=obsnum, date=date, date_type=date_type, pol=pol, status=status, length=length)
         s = self.Session()
         s.add(OBS)
         s.commit()
@@ -342,7 +348,8 @@ class DataBaseInterface(object):
         """
         neighbors = {}
         for obs in obslist:
-            obsnum = self.add_observation(obs['date'], obs['date_type'], obs['pol'],
+
+            obsnum = self.add_observation(obs['obsnum'], obs['date'], obs['date_type'], obs['pol'],
                                           obs['filename'], obs['host'],
                                           length=obs['length'], status='NEW')
             neighbors[obsnum] = (obs.get('neighbor_low', None), obs.get('neighbor_high', None))
@@ -460,7 +467,7 @@ class DataBaseInterface(object):
                 File.filename.like('%uv')).one()
         except:
             print("Could not get uv")
-        print("something")
+
         # Jon : FIX ME!!!!!
         POTFILE = s.query(File).filter(File.observation == OBS).first()
         host = POTFILE.host
