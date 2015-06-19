@@ -111,7 +111,7 @@ class TestScheduler(unittest.TestCase):
         f = 1
         a = s.get_action(self.dbi, f, ActionClass=self.FakeAction)
         self.assertNotEqual(a, None)  # everything is actionable in this test
-        self.assertEqual(a.task, sch.FILE_PROCESSING_LINKS[self.dbi.files[f]])  # Jon: FIXME HARDWF# check this links to the next step
+        self.assertEqual(a.task, sch.FILE_PROCESSING_LINKS[self.dbi.files[f]])  # Jon: FIXME HARDWF # check this links to the next step
 
     def test_update_action_queue(self):
         s = sch.Scheduler(nstills=1, actions_per_still=1, blocksize=10)

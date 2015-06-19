@@ -1,14 +1,14 @@
 import SocketServer
 import logging
 import threading
-import subprocess
+# import subprocess
 import time
 import socket
 import os
 import tempfile
-import psutil
 import scheduler
 import sys
+import psutil
 
 logger = logging.getLogger('taskserver')
 logger.setLevel(logging.DEBUG)
@@ -111,9 +111,11 @@ class Task:
             self.record_completion()
 
     def kill(self):
+#        myproc = psutil.Process(pid=self.process.pid)
+#        print("My Process pid in kill : %s") % myproc.children(recursive=True)
         self.record_failure()
         logger.debug('Task.kill Trying to kill: ({task},{obsnum}) pid={pid}'.format(task=self.task, obsnum=self.obs, pid=self.process.pid))
-#        logger.debug('Task.kill Killing {n} children to prevent orphans: ({task},{obsnum})'.format(n=len(self.process.children(recursive=True)), task=self.task, obsnum=self.obs))
+        logger.debug('Task.kill Killing {n} children to prevent orphans: ({task},{obsnum})'.format(n=len(self.process.children(recursive=True)), task=self.task, obsnum=self.obs))
         for child in self.process.children(recursive=True):
             child.kill()
         logger.debug('Task.kill Killing shell script: ({task},{obsnum})'.format(task=self.task, obsnum=self.obs))

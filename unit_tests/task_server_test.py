@@ -77,6 +77,8 @@ class FakeDataBaseInterface:
     def set_obs_still_path(self, obsnum, path):
         self.paths[obsnum] = path
 
+    def update_log(self, obsnum, status=None, logtext=None, exit_status=None, append=True):
+        return True
 
 class TestFunctions(unittest.TestCase):
 
@@ -148,11 +150,13 @@ class TestTaskServer(unittest.TestCase):
         self.dbi = FakeDataBaseInterface()
 
     def test_basics(self):
-        s = ts.TaskServer(self.dbi)
+        s = ts.TaskServer(self.dbi, port=7777)
         t = SleepTask('UV', 1, 'still', [], self.dbi)  # Jon : HARDWF
         s.append_task(t)
         self.assertEqual(len(s.active_tasks), 1)
         t.run()
+        print("My Pid!: %s") % t.process.pid
+
         s.kill(t.process.pid)
         while t.poll() is None:
             time.sleep(.01)
@@ -165,7 +169,7 @@ class TestTaskServer(unittest.TestCase):
         self.assertEqual(len(s.active_tasks), 0)
 
     def test_shutdown(self):
-        s = ts.TaskServer(self.dbi)
+        s = ts.TaskServer(self.dbi, port=7780)
         t = threading.Thread(target=s.start)
         t.start()
         s.shutdown()
@@ -182,15 +186,15 @@ class TestTaskServer(unittest.TestCase):
                 t = SleepTask('UV', 1, 'still', [], self.dbi)  # Jon : HARDWF
                 t.run()
                 me.server.append_task(t)
-        s = ts.TaskServer(self.dbi, handler=SleepHandler)
+        s = ts.TaskServer(self.dbi, port=7779, handler=SleepHandler)
         thd = threading.Thread(target=s.start)
         thd.start()
-        print("Still port %s") % ts.STILL_PORT
+#        print("Still port %s") % ts.STILL_PORT
         try:
             self.assertEqual(len(s.active_tasks), 0)
             self.assertEqual(self.var, 0)
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.sendto('test', ('localhost', ts.STILL_PORT))
+            sock.sendto('test', ('localhost', 7779))
 
             while self.var != 1:
                 time.sleep(.1)
@@ -212,12 +216,12 @@ class TestTaskServer(unittest.TestCase):
                 me.server.append_task(t)
                 t.run()
                 self.var += 1
-        s = ts.TaskServer(self.dbi, handler=NullHandler)
+        s = ts.TaskServer(self.dbi, handler=NullHandler, port=7778)
         thd = threading.Thread(target=s.start)
         thd.start()
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.sendto(ts.to_pkt('UV', 1, 'still', []), ('localhost', ts.STILL_PORT))  # Jon : HARDWF
+            sock.sendto(ts.to_pkt('UV', 1, 'still', []), ('127.0.0.1', 7778))  # Jon : HARDWF
             while self.var != 1:
                 time.sleep(.6)
             self.assertEqual(self.var, 1)
@@ -233,8 +237,8 @@ class TestTaskClient(unittest.TestCase):
         self.dbi = FakeDataBaseInterface()
 
     def test_attributes(self):
-        tc = ts.TaskClient(self.dbi, 'localhost')
-        self.assertEqual(tc.host_port, ('localhost', ts.STILL_PORT))
+        tc = ts.TaskClient(self.dbi, 'localhost', port=7777)
+        self.assertEqual(tc.host_port, ('localhost:7777'))
 
     def test__tx(self):
         self.pkt = ''
@@ -242,11 +246,11 @@ class TestTaskClient(unittest.TestCase):
         class SleepHandler(ts.TaskHandler):
             def handle(me):
                 self.pkt = me.get_pkt()
-        s = ts.TaskServer(self.dbi, handler=SleepHandler)
+        s = ts.TaskServer(self.dbi, handler=SleepHandler, port=7777)
         thd = threading.Thread(target=s.start)
         thd.start()
         try:
-            tc = ts.TaskClient(self.dbi, 'localhost')
+            tc = ts.TaskClient(self.dbi, 'localhost', port=7777, workflow=None)
             tc._tx('UV', 1, ['a', 'b', 'c'])  # Jon : HARDWF
         finally:
             s.shutdown()
@@ -274,11 +278,12 @@ class TestTaskClient(unittest.TestCase):
         class SleepHandler(ts.TaskHandler):
             def handle(me):
                 self.pkt = me.get_pkt()
-        s = ts.TaskServer(self.dbi, handler=SleepHandler)
+        s = ts.TaskServer(self.dbi, handler=SleepHandler, port=7777)
         thd = threading.Thread(target=s.start)
         thd.start()
         try:
-            tc = ts.TaskClient(self.dbi, 'localhost')
+            tc = ts.TaskClient(self.dbi, 'localhost', workflow=None,
+                               port=7777)
             tc.tx('UV', 1)  # Jon : HARDWF
         finally:
             s.shutdown()
