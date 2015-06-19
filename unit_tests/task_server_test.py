@@ -1,10 +1,12 @@
 import unittest
 import threading
-import subprocess
+# import subprocess
 import os
 import time
 import socket
 import sys
+import psutil
+
 basedir = os.path.dirname(os.path.realpath(__file__)).replace("unit_tests", "")
 sys.path.append(basedir + 'lib')
 
@@ -12,14 +14,15 @@ import scheduler as sch
 import task_server as ts
 
 
+
 class SleepTask(ts.Task):
     def _run(self):
-        return subprocess.Popen(['sleep', '100'], stdout=open(os.devnull, 'w'))
+        return psutil.Popen(['sleep', '100'], stdout=open(os.devnull, 'w'))
 
 
 class NullTask(ts.Task):
     def _run(self):
-        return subprocess.Popen(['ls'], stdout=open(os.devnull, 'w'), cwd=self.cwd)
+        return psutil.Popen(['ls'], stdout=open(os.devnull, 'w'), cwd=self.cwd)
 
 
 class FakeDataBaseInterface:
@@ -116,7 +119,7 @@ class TestTask(unittest.TestCase):
         class VarTask(ts.Task):
             def _run(me):
                 self.var += 1
-                return subprocess.Popen(['ls'], stdout=open(os.devnull, 'w'), cwd=me.cwd)
+                return psutil.Popen(['ls'], stdout=open(os.devnull, 'w'), cwd=me.cwd)
         self.VarTask = VarTask
 
     def test_run(self):
@@ -126,7 +129,7 @@ class TestTask(unittest.TestCase):
         var = self.var
         t.run()
         self.assertEqual(self.var, var + 1)
-        self.assertTrue(type(t.process) is subprocess.Popen)
+        self.assertTrue(type(t.process) is psutil.Popen)
         t.finalize()
         self.assertEqual(dbi.get_obs_status(1), 'UV')  # Jon : HARDWF
         self.assertRaises(RuntimeError, t.run)
@@ -169,7 +172,7 @@ class TestTaskServer(unittest.TestCase):
         self.assertEqual(len(s.active_tasks), 0)
 
     def test_shutdown(self):
-        s = ts.TaskServer(self.dbi, port=7780)
+        s = ts.TaskServer(self.dbi, port=7777)
         t = threading.Thread(target=s.start)
         t.start()
         s.shutdown()
@@ -186,7 +189,7 @@ class TestTaskServer(unittest.TestCase):
                 t = SleepTask('UV', 1, 'still', [], self.dbi)  # Jon : HARDWF
                 t.run()
                 me.server.append_task(t)
-        s = ts.TaskServer(self.dbi, port=7779, handler=SleepHandler)
+        s = ts.TaskServer(self.dbi, port=7777, handler=SleepHandler)
         thd = threading.Thread(target=s.start)
         thd.start()
 #        print("Still port %s") % ts.STILL_PORT
@@ -194,7 +197,7 @@ class TestTaskServer(unittest.TestCase):
             self.assertEqual(len(s.active_tasks), 0)
             self.assertEqual(self.var, 0)
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.sendto('test', ('localhost', 7779))
+            sock.sendto('test', ('localhost', 7777))
 
             while self.var != 1:
                 time.sleep(.1)
@@ -216,12 +219,12 @@ class TestTaskServer(unittest.TestCase):
                 me.server.append_task(t)
                 t.run()
                 self.var += 1
-        s = ts.TaskServer(self.dbi, handler=NullHandler, port=7778)
+        s = ts.TaskServer(self.dbi, handler=NullHandler, port=7777)
         thd = threading.Thread(target=s.start)
         thd.start()
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.sendto(ts.to_pkt('UV', 1, 'still', []), ('127.0.0.1', 7778))  # Jon : HARDWF
+            sock.sendto(ts.to_pkt('UV', 1, 'still', []), ('127.0.0.1', 7777))  # Jon : HARDWF
             while self.var != 1:
                 time.sleep(.6)
             self.assertEqual(self.var, 1)
@@ -293,3 +296,5 @@ class TestTaskClient(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
