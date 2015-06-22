@@ -300,6 +300,7 @@ class Scheduler:
         if None in neighbors:  # is this an end-file that can't be processed past UVCR?
             # next_step = ENDFILE_PROCESSING_LINKS[status]
             cur_step_index = self.wf.workflow_actions_endfile.index(status)
+
             next_step = self.wf.workflow_actions_endfile[cur_step_index + 1]
             print(next_step)
         else:  # this is a normal file

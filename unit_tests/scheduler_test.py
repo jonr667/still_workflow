@@ -6,7 +6,9 @@ import os
 import sys
 basedir = os.path.dirname(os.path.realpath(__file__)).replace("unit_tests", "")
 sys.path.append(basedir + 'lib')
+sys.path.append(basedir + 'bin')
 
+import still
 import scheduler as sch
 import logging
 
@@ -27,12 +29,29 @@ class FakeDataBaseInterface:
             self.files[i] = 'UV_POT'
 
     def get_obs_status(self, obsnum):
-        return self.files[obsnum]
+        try:
+            print("Obs num : %s ") % obsnum
+            return self.files[obsnum]
+        except:
+            print("Got weird obs num apparently %s") % obsnum
 
     def list_observations(self):
         files = self.files.keys()
         files.sort()
         return files
+
+    def list_open_observations(self):
+        files = self.files.keys()
+        files.sort()
+        return files
+    #        s = self.Session()
+    #        # todo tests
+    #        obsnums = [obs.obsnum for obs in s.query(Observation).filter(Observation.status != 'NEW', Observation.status != 'COMPLETE')]
+    #        s.close()
+    #        return obsnums
+
+    def get_terminal_obs(self, nfail=5):
+        return True
 
     def get_neighbors(self, obsnum):
         n1, n2 = obsnum - 1, obsnum + 1
@@ -89,6 +108,11 @@ class TestScheduler(unittest.TestCase):
     def setUp(self):
         self.nfiles = 10
         dbi = FakeDataBaseInterface(self.nfiles)
+
+        self.sg = still.SpawnerClass()
+        self.sg.config_file = "still_test_paper.cfg"
+        self.wf = still.WorkFlow()
+        still.process_client_config_file(self.sg, self.wf)
 
         class FakeAction(sch.Action):
             def _command(self):
@@ -171,7 +195,9 @@ class TestScheduler(unittest.TestCase):
                 if dbi.get_obs_status(f) != 'COMPLETE':
                     return False
             return True
-        s = sch.Scheduler(nstills=1, actions_per_still=1, blocksize=10)
+
+        s = sch.Scheduler("", self.wf, nstills=1, actions_per_still=1, blocksize=10)
+#        myscheduler = StillScheduler(task_clients, wf, actions_per_still=ACTIONS_PER_STILL, blocksize=BLOCK_SIZE, nstills=len(STILLS))  # Init scheduler daemon
         t = threading.Thread(target=s.start, args=(dbi, FakeAction), kwargs={'sleeptime': 0})
         t.start()
         tstart = time.time()

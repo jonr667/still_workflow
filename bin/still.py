@@ -114,7 +114,7 @@ def process_client_config_file(sg, wf):
         workflow = config['WorkFlow']  # Get workflow actions
         workflow_actions = workflow['actions'].replace(" ", "").split(",")
         wf.workflow_actions = tuple(workflow_actions)  # Get all the workflow actions and put them in a nice immutible tuple
-        if config.has_option('workflow', 'actions_endfile'):
+        if config.has_option('WorkFlow', 'actions_endfile'):
             workflow_actions_endfile = workflow['actions_endfile'].replace(" ", "").split(",")
             wf.workflow_actions_endfile = tuple(workflow_actions_endfile)
 

@@ -14,6 +14,7 @@ import scheduler as sch
 import task_server as ts
 
 
+TEST_PORT = 14204
 
 class SleepTask(ts.Task):
     def _run(self):
@@ -153,7 +154,7 @@ class TestTaskServer(unittest.TestCase):
         self.dbi = FakeDataBaseInterface()
 
     def test_basics(self):
-        s = ts.TaskServer(self.dbi, port=7777)
+        s = ts.TaskServer(self.dbi, port=TEST_PORT)
         t = SleepTask('UV', 1, 'still', [], self.dbi)  # Jon : HARDWF
         s.append_task(t)
         self.assertEqual(len(s.active_tasks), 1)
@@ -172,7 +173,7 @@ class TestTaskServer(unittest.TestCase):
         self.assertEqual(len(s.active_tasks), 0)
 
     def test_shutdown(self):
-        s = ts.TaskServer(self.dbi, port=7777)
+        s = ts.TaskServer(self.dbi, port=TEST_PORT)
         t = threading.Thread(target=s.start)
         t.start()
         s.shutdown()
@@ -189,7 +190,7 @@ class TestTaskServer(unittest.TestCase):
                 t = SleepTask('UV', 1, 'still', [], self.dbi)  # Jon : HARDWF
                 t.run()
                 me.server.append_task(t)
-        s = ts.TaskServer(self.dbi, port=7777, handler=SleepHandler)
+        s = ts.TaskServer(self.dbi, port=TEST_PORT, handler=SleepHandler)
         thd = threading.Thread(target=s.start)
         thd.start()
 #        print("Still port %s") % ts.STILL_PORT
@@ -197,7 +198,7 @@ class TestTaskServer(unittest.TestCase):
             self.assertEqual(len(s.active_tasks), 0)
             self.assertEqual(self.var, 0)
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.sendto('test', ('localhost', 7777))
+            sock.sendto('test', ('localhost', TEST_PORT))
 
             while self.var != 1:
                 time.sleep(.1)
@@ -219,12 +220,12 @@ class TestTaskServer(unittest.TestCase):
                 me.server.append_task(t)
                 t.run()
                 self.var += 1
-        s = ts.TaskServer(self.dbi, handler=NullHandler, port=7777)
+        s = ts.TaskServer(self.dbi, handler=NullHandler, port=TEST_PORT)
         thd = threading.Thread(target=s.start)
         thd.start()
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.sendto(ts.to_pkt('UV', 1, 'still', []), ('127.0.0.1', 7777))  # Jon : HARDWF
+            sock.sendto(ts.to_pkt('UV', 1, 'still', []), ('127.0.0.1', TEST_PORT))  # Jon : HARDWF
             while self.var != 1:
                 time.sleep(.6)
             self.assertEqual(self.var, 1)
@@ -240,8 +241,8 @@ class TestTaskClient(unittest.TestCase):
         self.dbi = FakeDataBaseInterface()
 
     def test_attributes(self):
-        tc = ts.TaskClient(self.dbi, 'localhost', port=7777)
-        self.assertEqual(tc.host_port, ('localhost:7777'))
+        tc = ts.TaskClient(self.dbi, 'localhost', port=TEST_PORT)
+        self.assertEqual(tc.host_port, ('localhost:TEST_PORT'))
 
     def test__tx(self):
         self.pkt = ''
@@ -249,11 +250,11 @@ class TestTaskClient(unittest.TestCase):
         class SleepHandler(ts.TaskHandler):
             def handle(me):
                 self.pkt = me.get_pkt()
-        s = ts.TaskServer(self.dbi, handler=SleepHandler, port=7777)
+        s = ts.TaskServer(self.dbi, handler=SleepHandler, port=TEST_PORT)
         thd = threading.Thread(target=s.start)
         thd.start()
         try:
-            tc = ts.TaskClient(self.dbi, 'localhost', port=7777, workflow=None)
+            tc = ts.TaskClient(self.dbi, 'localhost', port=TEST_PORT, workflow=None)
             tc._tx('UV', 1, ['a', 'b', 'c'])  # Jon : HARDWF
         finally:
             s.shutdown()
@@ -281,12 +282,12 @@ class TestTaskClient(unittest.TestCase):
         class SleepHandler(ts.TaskHandler):
             def handle(me):
                 self.pkt = me.get_pkt()
-        s = ts.TaskServer(self.dbi, handler=SleepHandler, port=7777)
+        s = ts.TaskServer(self.dbi, handler=SleepHandler, port=TEST_PORT)
         thd = threading.Thread(target=s.start)
         thd.start()
         try:
             tc = ts.TaskClient(self.dbi, 'localhost', workflow=None,
-                               port=7777)
+                               port=TEST_PORT)
             tc.tx('UV', 1)  # Jon : HARDWF
         finally:
             s.shutdown()
