@@ -32,7 +32,8 @@ MAXFAIL = 5  # Jon : move this into config
 
 class Action:
     '''An Action performs a task on an observation, and is scheduled by a Scheduler.'''
-    def __init__(self, obs, task, neighbor_status, still, workflow, task_clients=[], timeout=3600.):
+    def __init__(self, obs, task, neighbor_status, still, workflow, timeout=3600.):
+
         '''f:obs, task:target status,
         neighbor_status:status of adjacent obs (do not enter a status for a non-existent neighbor
         still:still action will run on.'''
@@ -45,7 +46,8 @@ class Action:
         self.launch_time = -1
         self.timeout = timeout
         self.wf = workflow
-        self.task_client = task_clients[still]
+
+        # self.task_client = task_clients[still]  # Do I need this?
 
     def set_priority(self, p):
         '''Assign a priority to this action.  Highest priorities are scheduled first.'''
@@ -169,6 +171,7 @@ class Scheduler:
                     print("Actions per still : %s") % self.actions_per_still
                     try:
                         a = self.pop_action_queue(still, tx=False)
+                        print("Ever get past?")
                     except(IndexError):  # no actions can be taken on this still
                         # logger.info('No actions available for still-%d\n' % still)
                         print("No actions could be taken!?")
@@ -195,7 +198,7 @@ class Scheduler:
             print("A.is_transfer %s, TX: %s") % (a.is_transfer, tx)
             if a.still == still and a.is_transfer == tx:
                 return self.action_queue.pop(i)
-        raise IndexError('No actions available for still-%d\n' % still)
+        raise IndexError('No actions available for still : %d\n' % still)
 
     def get_launched_actions(self, still, tx=False):
         return [a for a in self.launched_actions[still] if a.is_transfer == tx]
@@ -211,9 +214,12 @@ class Scheduler:
 
     def clean_completed_actions(self, dbi):
         '''Check launched actions for completion, timeout or fail'''
+        print("Do I get to clean completed actions?")
         for still in self.launched_actions:
+            print("my still to clean : %s ") % still
             updated_actions = []
             for cnt, a in enumerate(self.launched_actions[still]):
+                print("My clean cnt : %s") % cnt
                 status = dbi.get_obs_status(a.obs)
                 pid = dbi.get_obs_pid(a.obs)
                 try:
@@ -268,17 +274,23 @@ class Scheduler:
         can be taken.'''
         # Jon : We should look into using db filters here instead of these loops
         failed = dbi.get_terminal_obs()
+        for f in self.active_obs:
+            print("My active obs...: %s") % f
         actions = [self.get_action(dbi, f, ActionClass=ActionClass, action_args=action_args) for f in self.active_obs]
+
+        print("Actions!1 : ", actions)
         actions = [a for a in actions if a is not None]  # remove unactionables
         actions = [a for a in actions if not self.already_launched(a)]  # filter actions already launched
         actions = [a for a in actions if self.failcount.get(str(a.obs) + dbi.get_obs_status(a.obs), 0) < MAXFAIL]  # filter actions that have utterly failed us
-        actions = [a for a in actions if not a.obs in failed]  # Filter actions that have failed before
+        actions = [a for a in actions if a.obs not in failed]  # Filter actions that have failed before
 
         if self.wf.prioritize_obs == 1:
+            print("priority set?")
             for a in actions:
                 a.set_priority(self.determine_priority(a, dbi))
 
         actions.sort(action_cmp, reverse=True)  # place most important actions first
+
         self.action_queue = actions  # completely throw out previous action list
         for i in actions:
             print("Actions %s") % i.obs
@@ -294,20 +306,25 @@ class Scheduler:
         ActionClass: a subclass of Action, for customizing actions.
             None defaults to the standard Action'''
         status = dbi.get_obs_status(obs)
+        print("Status %s") % status
         if status == 'COMPLETE':  # Jon: May be worth adding some code here to make sure to pop this observation out of the queue so we don't keep hitting it
             return None  # obs is complete
         neighbors = dbi.get_neighbors(obs)
+        print("Neighbors for obs %s : ") % obs
+        print(neighbors)
+        print("End Neighbor")
         if None in neighbors:  # is this an end-file that can't be processed past UVCR?
             # next_step = ENDFILE_PROCESSING_LINKS[status]
             cur_step_index = self.wf.workflow_actions_endfile.index(status)
 
             next_step = self.wf.workflow_actions_endfile[cur_step_index + 1]
-            print(next_step)
+            print("My next step: %s") % next_step
         else:  # this is a normal file
             # next_step = FILE_PROCESSING_LINKS[status]
             cur_step_index = self.wf.workflow_actions.index(status)
             next_step = self.wf.workflow_actions[cur_step_index + 1]
             print(next_step)
+        print(neighbors)
         neighbor_status = [dbi.get_obs_status(n) for n in neighbors if n is not None]
         # XXX shoudl check first if obs has been assigned to a still in the db already and continue to use that
         # and only generate a new still # if it hasn't been assigned one already.
@@ -315,9 +332,13 @@ class Scheduler:
         if ActionClass is None:
             ActionClass = Action
         #     def __init__(self, obs, task, neighbor_status, still, workflow, timeout=3600.):
-        a = ActionClass(obs, next_step, neighbor_status, still, self.wf, *action_args)
+        print(action_args)
+        print("My action class")
+        print(ActionClass)
 
+        a = ActionClass(obs, next_step, neighbor_status, still, self.wf, *action_args)
         if self.wf.neighbors == 1:
+            print("We have neighbors enabled")
             if a.has_prerequisites():
                 return a
         # logging.debug('scheduler.get_action: (%s,%d) does not have prereqs' % (a.task, a.obs))

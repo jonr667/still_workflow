@@ -8,11 +8,14 @@ basedir = os.path.dirname(os.path.realpath(__file__)).replace("unit_tests", "")
 sys.path.append(basedir + 'lib')
 sys.path.append(basedir + 'bin')
 
-import still
+from still import process_client_config_file, WorkFlow, SpawnerClass
 import scheduler as sch
 import logging
-
+from task_server import TaskClient
 logging.basicConfig(level=logging.DEBUG)
+
+
+TEST_PORT = 14204
 
 
 class NullAction(sch.Action):
@@ -29,11 +32,10 @@ class FakeDataBaseInterface:
             self.files[i] = 'UV_POT'
 
     def get_obs_status(self, obsnum):
-        try:
-            print("Obs num : %s ") % obsnum
-            return self.files[obsnum]
-        except:
-            print("Got weird obs num apparently %s") % obsnum
+        print("Obs num : %s : Status %s ") % (obsnum, self.files[obsnum])
+        return self.files[obsnum]
+        #except:
+        #    print("Got weird obs num apparently %s") % obsnum
 
     def list_observations(self):
         files = self.files.keys()
@@ -44,20 +46,22 @@ class FakeDataBaseInterface:
         files = self.files.keys()
         files.sort()
         return files
-    #        s = self.Session()
-    #        # todo tests
-    #        obsnums = [obs.obsnum for obs in s.query(Observation).filter(Observation.status != 'NEW', Observation.status != 'COMPLETE')]
-    #        s.close()
-    #        return obsnums
 
     def get_terminal_obs(self, nfail=5):
-        return True
+        FAILED_OBSNUMS = []
+        return FAILED_OBSNUMS
+
+    # def get_neighbors(self, obsnum):
+    #    n1,n2 = obsnum-1, obsnum+1
+    #    if not self.files.has_key(n1): n1 = None
+    #    if not self.files.has_key(n2): n2 = None
+    #    return (n1,n2)
 
     def get_neighbors(self, obsnum):
         n1, n2 = obsnum - 1, obsnum + 1
-        if n1 in self.files:
+        if n1 not in self.files:
             n1 = None
-        if n2 in self.files:
+        if n2 not in self.files:
             n2 = None
         return (n1, n2)
 
@@ -68,25 +72,29 @@ class TestAction(unittest.TestCase):
         self.files = [1, 2, 3]
         self.still = 0
         self.task = 'UVC'  # Jon : change me : HARDWF
+        self.sg = SpawnerClass()
+        self.sg.config_file = "still_test_paper.cfg"
+        self.wf = WorkFlow()
+        process_client_config_file(self.sg, self.wf)
 
     def test_attributes(self):
-        a = sch.Action(self.files[1], self.task, [self.files[0], self.files[2]], self.still)
+        a = sch.Action(self.files[1], self.task, [self.files[0], self.files[2]], self.still, self.wf)
         self.assertEqual(a.task, self.task)
         # XXX could do more here
 
     def test_priority(self):
-        a = sch.Action(self.files[1], self.task, [self.files[0], self.files[2]], self.still)
+        a = sch.Action(self.files[1], self.task, [self.files[0], self.files[2]], self.still, self.wf)
         self.assertEqual(a.priority, 0)
         a.set_priority(5)
         self.assertEqual(a.priority, 5)
 
     def test_prereqs(self):
-        a = sch.Action(self.files[1], self.task, ['UV', None], self.still)  # Jon : Fixme HARDWF
+        a = sch.Action(self.files[1], self.task, ['UV', None], self.still, self.wf)  # Jon : Fixme HARDWF
         self.assertTrue(a.has_prerequisites())
         # XXX more here
 
     def test_timeout(self):
-        a = NullAction(self.files[1], self.task, ['UV', 'UV'], self.still, timeout=100)  # Jon : Fixme HARDWF
+        a = NullAction(self.files[1], self.task, ['UV', 'UV'], self.still, self.wf, timeout=100)  # Jon : Fixme HARDWF
         self.assertRaises(AssertionError, a.timed_out)
         t0 = 1000
         a.launch(launch_time=t0)
@@ -95,7 +103,8 @@ class TestAction(unittest.TestCase):
 
     def test_action_cmp(self):
         priorities = range(10)
-        actions = [sch.Action(self.files[1], self.task, [self.files[0], self.files[2]], self.still) for p in priorities]
+        # def __init__(self, obs, task, neighbor_status, still, workflow, task_clients=[], timeout=3600.):
+        actions = [sch.Action(self.files[1], self.task, [self.files[0], self.files[2]], self.still, self.wf) for p in priorities]
         random.shuffle(priorities)
         for a, p in zip(actions, priorities):
             a.set_priority(p)
@@ -108,37 +117,59 @@ class TestScheduler(unittest.TestCase):
     def setUp(self):
         self.nfiles = 10
         dbi = FakeDataBaseInterface(self.nfiles)
-
-        self.sg = still.SpawnerClass()
+        self.dbi = dbi
+        self.sg = SpawnerClass()
         self.sg.config_file = "still_test_paper.cfg"
-        self.wf = still.WorkFlow()
-        still.process_client_config_file(self.sg, self.wf)
+        self.wf = WorkFlow()
+        process_client_config_file(self.sg, self.wf)
 
         class FakeAction(sch.Action):
             def _command(self):
                 dbi.files[self.filename] = self.task
         self.FakeAction = FakeAction
-        self.dbi = dbi
+        self.task_clients = TaskClient(dbi, 'localhost', self.wf, port=TEST_PORT)
 
     def test_attributes(self):
-        s = sch.Scheduler(nstills=1, actions_per_still=1)
+        s = sch.Scheduler(self.task_clients, self.wf, nstills=1, actions_per_still=1)
         self.assertEqual(s.launched_actions.keys(), [0])
 
     def test_get_new_active_obs(self):
-        s = sch.Scheduler(nstills=1, actions_per_still=1)
+        s = sch.Scheduler(self.task_clients, self.wf, nstills=1, actions_per_still=1)
         s.get_new_active_obs(self.dbi)
         for i in xrange(self.nfiles):
             self.assertTrue(i in s.active_obs)
 
     def test_get_action(self):
-        s = sch.Scheduler(nstills=1, actions_per_still=1)
+
+        s = sch.Scheduler(self.task_clients, self.wf, nstills=1, actions_per_still=1)
         f = 1
         a = s.get_action(self.dbi, f, ActionClass=self.FakeAction)
         self.assertNotEqual(a, None)  # everything is actionable in this test
-        self.assertEqual(a.task, sch.FILE_PROCESSING_LINKS[self.dbi.files[f]])  # Jon: FIXME HARDWF # check this links to the next step
+        FILE_PROCESSING_LINKS = {'ACQUIRE_NEIGHBORS': 'UVCRE',
+                                 'CLEAN_NEIGHBORS': 'UVCRRE_POT',
+                                 'CLEAN_NPZ': 'CLEAN_NEIGHBORS',
+                                 'CLEAN_UV': 'UVCR',
+                                 'CLEAN_UVC': 'ACQUIRE_NEIGHBORS',
+                                 'CLEAN_UVCR': 'COMPLETE',
+                                 'CLEAN_UVCRE': 'UVCRRE',
+                                 'CLEAN_UVCRR': 'CLEAN_NPZ',
+                                 'CLEAN_UVCRRE': 'CLEAN_UVCR',
+                                 'COMPLETE': None,
+                                 'NEW': 'UV_POT',
+                                 'NPZ': 'UVCRR',
+                                 'NPZ_POT': 'CLEAN_UVCRE',
+                                 'UV': 'UVC',
+                                 'UVC': 'CLEAN_UV',
+                                 'UVCR': 'CLEAN_UVC',
+                                 'UVCRE': 'NPZ',
+                                 'UVCRR': 'NPZ_POT',
+                                 'UVCRRE': 'CLEAN_UVCRR',
+                                 'UVCRRE_POT': 'CLEAN_UVCRRE',
+                                 'UV_POT': 'UV'}
+        self.assertEqual(a.task, FILE_PROCESSING_LINKS[self.dbi.files[f]])  # Jon: FIXME HARDWF # check this links to the next step
 
     def test_update_action_queue(self):
-        s = sch.Scheduler(nstills=1, actions_per_still=1, blocksize=10)
+        s = sch.Scheduler(self.task_clients, self.wf, nstills=1, actions_per_still=1, blocksize=10)
         s.get_new_active_obs(self.dbi)
         s.update_action_queue(self.dbi)
         self.assertEqual(len(s.action_queue), self.nfiles)
@@ -148,7 +179,7 @@ class TestScheduler(unittest.TestCase):
 
     def test_launch(self):
         dbi = FakeDataBaseInterface(10)
-        s = sch.Scheduler(nstills=1, actions_per_still=1, blocksize=10)
+        s = sch.Scheduler(self.task_clients, self.wf, nstills=1, actions_per_still=1, blocksize=10)
         s.get_new_active_obs(self.dbi)
         s.update_action_queue(self.dbi)
         a = s.pop_action_queue(0)
@@ -160,27 +191,27 @@ class TestScheduler(unittest.TestCase):
         self.assertEqual(len(s.action_queue), self.nfiles - 1)  # make sure this action is excluded from list next time
 
     def test_clean_completed_actions(self):
-        dbi = FakeDataBaseInterface(10)
-
         class FakeAction(sch.Action):
             def _command(self):
                 dbi.files[self.obs] = self.task
-        s = sch.Scheduler(nstills=1, actions_per_still=1, blocksize=10)
+ 
+        s = sch.Scheduler(self.task_clients, self.wf, nstills=1, actions_per_still=1, blocksize=10)
         s.get_new_active_obs(self.dbi)
         s.update_action_queue(self.dbi, ActionClass=FakeAction)
         a = s.pop_action_queue(0)
         s.launch_action(a)
         self.assertEqual(len(s.launched_actions[0]), 1)
-        s.clean_completed_actions(dbi)
+        s.clean_completed_actions(self.dbi)
         self.assertEqual(len(s.launched_actions[0]), 0)
 
     def test_prereqs(self):
-        dbi = FakeDataBaseInterface(3)
-        a = sch.Action(1, 'UV', ['UV', 'UV'], 0)  # Jon : HARDWF
+        #        dbi = FakeDataBaseInterface(3)
+        a = sch.Action(1, 'UV', ['UV', 'UV'], 0, self.wf)  # Jon : HARDWF
+        # a = sch.Action(self.files[1], self.task, ['UV', None], self.still, self.wf)  # Jon : Fixme HARDWF
         self.assertTrue(a.has_prerequisites())
-        a = sch.Action(1, 'ACQUIRE_NEIGHBORS', ['UVCR', 'UVCR'], 0)  # Jon : HARDWF
+        a = sch.Action(1, 'ACQUIRE_NEIGHBORS', ['UVCR', 'UVCR'], 0, self.wf)  # Jon : HARDWF
         self.assertTrue(a.has_prerequisites())
-        a = sch.Action(1, 'ACQUIRE_NEIGHBORS', ['UVCR', 'UV'], 0)  # Jon : HARDWF
+        a = sch.Action(1, 'ACQUIRE_NEIGHBORS', ['UVCR', 'UV'], 0, self.wf)  # Jon : HARDWF
         self.assertFalse(a.has_prerequisites())
 
     def test_start(self):
@@ -196,7 +227,9 @@ class TestScheduler(unittest.TestCase):
                     return False
             return True
 
-        s = sch.Scheduler("", self.wf, nstills=1, actions_per_still=1, blocksize=10)
+        task_clients = TaskClient(dbi, 'localhost', self.wf, port=TEST_PORT)
+
+        s = sch.Scheduler(task_clients, self.wf, nstills=1, actions_per_still=1, blocksize=10)
 #        myscheduler = StillScheduler(task_clients, wf, actions_per_still=ACTIONS_PER_STILL, blocksize=BLOCK_SIZE, nstills=len(STILLS))  # Init scheduler daemon
         t = threading.Thread(target=s.start, args=(dbi, FakeAction), kwargs={'sleeptime': 0})
         t.start()
@@ -212,8 +245,8 @@ class TestScheduler(unittest.TestCase):
             dbi = FakeDataBaseInterface(10)
 
             class FakeAction(sch.Action):
-                def __init__(self, f, task, neighbors, still):
-                    sch.Action.__init__(self, f, task, neighbors, still, timeout=.01)
+                def __init__(self, f, task, neighbors, still, wf):
+                    sch.Action.__init__(self, f, task, neighbors, still, wf, timeout=.01)
 
                 def _command(self):
                     if random.random() > .5:
@@ -224,7 +257,9 @@ class TestScheduler(unittest.TestCase):
                     if dbi.get_obs_status(f) != 'COMPLETE':
                         return False
                 return True
-            s = sch.Scheduler(nstills=1, actions_per_still=1, blocksize=10)
+            task_clients = TaskClient(dbi, 'localhost', self.wf, port=TEST_PORT)
+
+            s = sch.Scheduler(task_clients, self.wf, nstills=1, actions_per_still=1, blocksize=10)
             t = threading.Thread(target=s.start, args=(dbi, FakeAction), kwargs={'sleeptime': 0})
             t.start()
             tstart = time.time()

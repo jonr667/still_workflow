@@ -205,36 +205,40 @@ def main_server(sg):
     return
 
 
-sg = SpawnerClass()
-workflow_objects = WorkFlow()
+def main():
+    sg = SpawnerClass()
+    workflow_objects = WorkFlow()
 
-# Probably accept config file location and maybe config file section as command line arguments
-# for the moment this is mostly just placeholder stuffs
+    # Probably accept config file location and maybe config file section as command line arguments
+    # for the moment this is mostly just placeholder stuffs
 
-parser = argparse.ArgumentParser(description='STILL workflow management software')
-parser.add_argument('--init', dest='init', action='store_true',
-                    help='Initialize the database if this is the first time running this')
-parser.add_argument('--server', dest='server', action='store_true',
-                    help='Start a Still Task Server')
-parser.add_argument('--client', dest='client', action='store_true',
-                    help='Start a Still Task Client')
-parser.add_argument('--config_file', dest='config_file', required=False,
-                    help="Specify the complete path to the config file")
+    parser = argparse.ArgumentParser(description='STILL workflow management software')
+    parser.add_argument('--init', dest='init', action='store_true',
+                        help='Initialize the database if this is the first time running this')
+    parser.add_argument('--server', dest='server', action='store_true',
+                        help='Start a Still Task Server')
+    parser.add_argument('--client', dest='client', action='store_true',
+                        help='Start a Still Task Client')
+    parser.add_argument('--config_file', dest='config_file', required=False,
+                        help="Specify the complete path to the config file")
 
+    parser.set_defaults(config_file="%setc/still.cfg" % basedir)
 
-parser.set_defaults(config_file="%setc/still.cfg" % basedir)
+    args, unknown = parser.parse_known_args()
+    sg.config_file = args.config_file
+    process_client_config_file(sg, workflow_objects)
 
+    # Create database interface with SQL Alchemy
+    sg.db = StillDataBaseInterface(sg.dbhost, sg.dbport, sg.dbtype, sg.dbname, sg.dbuser, sg.dbpasswd, test=False)
 
-args, unknown = parser.parse_known_args()
-sg.config_file = args.config_file
-process_client_config_file(sg, workflow_objects)
+    if args.client is True:
+        main_client(sg, workflow_objects, args)
+    elif args.server is True:
+        main_server(sg)
+    else:
+        print("You must specify to start this as a client or server (--client or --server)")
 
-# Create database interface with SQL Alchemy
-sg.db = StillDataBaseInterface(sg.dbhost, sg.dbport, sg.dbtype, sg.dbname, sg.dbuser, sg.dbpasswd, test=False)
+    pass
 
-if args.client is True:
-    main_client(sg, workflow_objects, args)
-elif args.server is True:
-    main_server(sg)
-else:
-    print("You must specify to start this as a client or server (--client or --server)")
+if __name__ == "__main__":
+    main()
