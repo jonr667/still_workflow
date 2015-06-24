@@ -57,34 +57,35 @@ class Action:
         '''For the given task, check that neighbors are in prerequisite state.
         We don't check that the center obs is in the prerequisite state,
         s this action could not have been generated otherwise.'''
+
+        # Jon: I'm leaving this, it only accepting 2 at the moment but it would probably be nice to come back and clean this up
+        # to support however many
+        # index1, index2 = FILE_PROCESSING_PREREQS[self.task]
+
         try:
-            # This whole function could still be a bit off, haven't been able to fully test it yet.
-            # Jon: I'm leaving this, it only accepting 2 at the moment but it would probably be nice to come back and clean this up
-            # to support however many
-            # index1, index2 = FILE_PROCESSING_PREREQS[self.task]
-            if self.task in self.wf.action_prereqs:
-                index1 = self.wf.workflow_actions.index(self.wf.action_prereqs[self.task][0])
-            else:
-                return True  # jon : I only put this here due to the original try except did this..
-                try:
-                    index2 = self.wf.workflow_actions.index(self.wf.action_prereqs[self.task][1])
-                except:
-                    index2 = -1
-        except(KeyError):  # this task has no prereqs
-            # Not sure why this returns true here
+            index1, index2 = self.wf.workflow_actions.index(self.wf.action_prereqs[self.task])
+            print("Got indexes for try in has_prerequisites")
+        except:
+            print("Failed to get indexes from try in has_prerequisites")
             return True
+
+        print("has_prerequisites : Task : %s - Index1 : %s - Index2 : %s") % (self.task, self.wf.workflow_actions[index1], self.wf.workflow_actions[index2])
         # logger.debug('Action.has_prerequisites: checking (%s,%d) neighbor_status=%s' % (self.task, self.obs, self.neighbor_status))
 
         for status_of_neighbor in self.neighbor_status:
             if status_of_neighbor is None:  # indicates that obs hasn't been entered into DB yet
+                print("Due to STATUS_OF_NEIGHBOR has_prereqs is FALSE")
                 return False
             # index_of_neighbor_status = FILE_PROCESSING_STAGES.index(status_of_neighbor)
             index_of_neighbor_status = self.wf.workflow_actions.index(status_of_neighbor)
             if index1 is not None and index_of_neighbor_status < index1:
+                print("Due to index1 has_prereqs is FALSE")
                 return False
             if index2 is not None and index_of_neighbor_status >= index2:
+                print("Due to index2 has_prereqs is FALSE")
                 return False
             # logger.debug('Action.has_prerequisites: (%s,%d) prerequisites met' % (self.task, self.obs))
+            print("Has_prereqs TRUE : Index1 : %s   INdex2: %s") % (index1, index2)
         return True
 
     def launch(self, launch_time=None):
@@ -92,10 +93,10 @@ class Action:
         if launch_time is None:
             launch_time = time.time()
         self.launch_time = launch_time
-        logger.debug('Action: launching (%s,%d) on still %d' % (self.task, self.obs, self.still))
+        logger.debug('Action: launching (%s,%s) on still %d' % (self.task, self.obs, self.still))
         return self._command()
 
-    def command(self):
+    def _command(self):
         '''Replace this function in a subclass to execute different tasks.'''
         return
 
@@ -166,17 +167,12 @@ class Scheduler:
             # Launch actions that can be scheduled
             logger.info('launching actions')
             for still in self.launched_actions:
-                print("Still %s") % still
                 while len(self.get_launched_actions(still, tx=False)) < self.actions_per_still:
-                    print("Actions per still : %s") % self.actions_per_still
                     try:
                         a = self.pop_action_queue(still, tx=False)
-                        print("Ever get past?")
                     except(IndexError):  # no actions can be taken on this still
                         # logger.info('No actions available for still-%d\n' % still)
-                        print("No actions could be taken!?")
                         break  # move on to next still
-                    print("Got here to launch_action")
                     self.launch_action(a)
                 while len(self.get_launched_actions(still, tx=True)) < self.transfers_per_still:
                     try:
@@ -190,12 +186,12 @@ class Scheduler:
 
     def pop_action_queue(self, still, tx=False):
         '''Return highest priority action for the given still.'''
-        print("My action queue: %s") % self.action_queue
+  #      print("My action queue: %s") % self.action_queue
         for i in xrange(len(self.action_queue)):
             a = self.action_queue[i]
-            print("Action Queue from pop_action_queue %s") % a
-            print("A.still %s, Still: %s") % (a.still, still)
-            print("A.is_transfer %s, TX: %s") % (a.is_transfer, tx)
+#            print("Action Queue from pop_action_queue %s") % a
+#            print("A.still %s, Still: %s") % (a.still, still)
+#            print("A.is_transfer %s, TX: %s") % (a.is_transfer, tx)
             if a.still == still and a.is_transfer == tx:
                 return self.action_queue.pop(i)
         raise IndexError('No actions available for still : %d\n' % still)
@@ -214,12 +210,9 @@ class Scheduler:
 
     def clean_completed_actions(self, dbi):
         '''Check launched actions for completion, timeout or fail'''
-        print("Do I get to clean completed actions?")
         for still in self.launched_actions:
-            print("my still to clean : %s ") % still
             updated_actions = []
             for cnt, a in enumerate(self.launched_actions[still]):
-                print("My clean cnt : %s") % cnt
                 status = dbi.get_obs_status(a.obs)
                 pid = dbi.get_obs_pid(a.obs)
                 try:
@@ -263,7 +256,7 @@ class Scheduler:
 #        for f in dbi.list_observations():  # Jon: Lets change this from dbi.list_observations to one that only grabs non COMPLETE obsid's
         for open_obs in dbi.list_open_observations():  # Jon: replaced the above with this one that throws out NEW and COMPLETE obsid's
             # if dbi.get_obs_status(f) != 'COMPLETE' and not self._active_obs_dict.has_key(f):  # HARDWF Jon: I think I'm ok with this hardcode, need to rewrite, don't need to check complete
-            if open_obs not in self._active_obs_dict:  # HARDWF Jon: I think I'm ok with this hardcode, need to rewrite, don't need to check complete
+            if open_obs not in self._active_obs_dict:
                     self._active_obs_dict[open_obs] = len(self.active_obs)
                     self.active_obs.append(open_obs)
         return
@@ -277,15 +270,12 @@ class Scheduler:
         for f in self.active_obs:
             print("My active obs...: %s") % f
         actions = [self.get_action(dbi, f, ActionClass=ActionClass, action_args=action_args) for f in self.active_obs]
-
-        print("Actions!1 : ", actions)
         actions = [a for a in actions if a is not None]  # remove unactionables
         actions = [a for a in actions if not self.already_launched(a)]  # filter actions already launched
         actions = [a for a in actions if self.failcount.get(str(a.obs) + dbi.get_obs_status(a.obs), 0) < MAXFAIL]  # filter actions that have utterly failed us
         actions = [a for a in actions if a.obs not in failed]  # Filter actions that have failed before
 
         if self.wf.prioritize_obs == 1:
-            print("priority set?")
             for a in actions:
                 a.set_priority(self.determine_priority(a, dbi))
 
@@ -293,8 +283,7 @@ class Scheduler:
 
         self.action_queue = actions  # completely throw out previous action list
         for i in actions:
-            print("Actions %s") % i.obs
-            print("Actions %s") % i.task
+            print("Actions - obs: %s : task: %s") % (i.obs, i.task)
 
         return
 
@@ -306,39 +295,37 @@ class Scheduler:
         ActionClass: a subclass of Action, for customizing actions.
             None defaults to the standard Action'''
         status = dbi.get_obs_status(obs)
-        print("Status %s") % status
+        print("Obsid : %s    Status %s") % (obs, status)
         if status == 'COMPLETE':  # Jon: May be worth adding some code here to make sure to pop this observation out of the queue so we don't keep hitting it
+            print("COMPLETE for obsid : %s") % obs
             return None  # obs is complete
         neighbors = dbi.get_neighbors(obs)
         print("Neighbors for obs %s : ") % obs
-        print(neighbors)
-        print("End Neighbor")
+        print("The neighbors : ", neighbors)
+
         if None in neighbors:  # is this an end-file that can't be processed past UVCR?
             # next_step = ENDFILE_PROCESSING_LINKS[status]
             cur_step_index = self.wf.workflow_actions_endfile.index(status)
-
             next_step = self.wf.workflow_actions_endfile[cur_step_index + 1]
-            print("My next step: %s") % next_step
+            print("NONE in Neighbors, next step : %s") % next_step
         else:  # this is a normal file
             # next_step = FILE_PROCESSING_LINKS[status]
             cur_step_index = self.wf.workflow_actions.index(status)
             next_step = self.wf.workflow_actions[cur_step_index + 1]
-            print(next_step)
-        print(neighbors)
+            print("SOMETHING in Neighbors, next step : %s") % next_step
+
         neighbor_status = [dbi.get_obs_status(n) for n in neighbors if n is not None]
+        # Jon : just for some info on neighbors, remove later
+        print("Neighbor Status : ", neighbor_status)
+
         # XXX shoudl check first if obs has been assigned to a still in the db already and continue to use that
         # and only generate a new still # if it hasn't been assigned one already.
         still = self.obs_to_still(obs)
         if ActionClass is None:
             ActionClass = Action
-        #     def __init__(self, obs, task, neighbor_status, still, workflow, timeout=3600.):
-        print(action_args)
-        print("My action class")
-        print(ActionClass)
 
         a = ActionClass(obs, next_step, neighbor_status, still, self.wf, *action_args)
         if self.wf.neighbors == 1:
-            print("We have neighbors enabled")
             if a.has_prerequisites():
                 return a
         # logging.debug('scheduler.get_action: (%s,%d) does not have prereqs' % (a.task, a.obs))
@@ -347,7 +334,8 @@ class Scheduler:
     def determine_priority(self, action, dbi):
         '''Assign a priority to an action based on its status and the time
         order of the obs to which this action is attached.'''
-        pol, jdcnt = action.obs / 2 ** 32, action.obs % 2 ** 32  # XXX maybe not make this have to explicitly match dbi bits
+    #    print("From determine_priority, action.obs : %s : ") % action.obs
+        pol, jdcnt = int(action.obs) / 2 ** 32, int(action.obs) % 2 ** 32  # XXX maybe not make this have to explicitly match dbi bits
         return jdcnt * 4 + pol  # prioritize first by time, then by pol
         # XXX might want to prioritize finishing a obs already started before
         # moving to the latest one (at least, up to a point) to avoid a
@@ -357,4 +345,7 @@ class Scheduler:
 
     def obs_to_still(self, obs):
         '''Return the still that a obs should be transferred to.'''
-        return (obs / self.blocksize) % self.nstills
+
+        mystill = (int(obs) / self.blocksize) % self.nstills
+     #   print("My still : %s : from obs_to_still with obs : %s : blocksize : %s : nstills: %s :") % (mystill, obs, self.blocksize, self.nstills)
+        return mystill

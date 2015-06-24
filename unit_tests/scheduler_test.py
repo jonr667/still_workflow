@@ -51,11 +51,15 @@ class FakeDataBaseInterface:
         FAILED_OBSNUMS = []
         return FAILED_OBSNUMS
 
-    # def get_neighbors(self, obsnum):
-    #    n1,n2 = obsnum-1, obsnum+1
-    #    if not self.files.has_key(n1): n1 = None
-    #    if not self.files.has_key(n2): n2 = None
-    #    return (n1,n2)
+    def get_obs_pid(self, obsnum):
+        """
+        Jon: had a todo on it when I stole it from dbi
+        """
+        OBS = self.get_obs(obsnum)
+        return False
+    def get_obs(self, obsnum):
+
+        return obsnum
 
     def get_neighbors(self, obsnum):
         n1, n2 = obsnum - 1, obsnum + 1
@@ -191,10 +195,11 @@ class TestScheduler(unittest.TestCase):
         self.assertEqual(len(s.action_queue), self.nfiles - 1)  # make sure this action is excluded from list next time
 
     def test_clean_completed_actions(self):
+        dbi = FakeDataBaseInterface(10)
         class FakeAction(sch.Action):
             def _command(self):
                 dbi.files[self.obs] = self.task
- 
+
         s = sch.Scheduler(self.task_clients, self.wf, nstills=1, actions_per_still=1, blocksize=10)
         s.get_new_active_obs(self.dbi)
         s.update_action_queue(self.dbi, ActionClass=FakeAction)

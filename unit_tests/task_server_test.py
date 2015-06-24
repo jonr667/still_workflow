@@ -9,12 +9,39 @@ import psutil
 
 basedir = os.path.dirname(os.path.realpath(__file__)).replace("unit_tests", "")
 sys.path.append(basedir + 'lib')
+sys.path.append(basedir + 'bin')
 
 import scheduler as sch
 import task_server as ts
-
+from still import process_client_config_file, WorkFlow, SpawnerClass
+# import scheduler as sch
+# import logging
+# from task_server import TaskClient
 
 TEST_PORT = 14204
+
+FILE_PROCESSING_STAGES = ['NEW',
+                          'UV_POT',
+                          'UV',
+                          'UVC',
+                          'CLEAN_UV',
+                          'UVCR',
+                          'CLEAN_UVC',
+                          'ACQUIRE_NEIGHBORS',
+                          'UVCRE',
+                          'NPZ',
+                          'UVCRR',
+                          'NPZ_POT',
+                          'CLEAN_UVCRE',
+                          'UVCRRE',
+                          'CLEAN_UVCRR',
+                          'CLEAN_NPZ',
+                          'CLEAN_NEIGHBORS',
+                          'UVCRRE_POT',
+                          'CLEAN_UVCRRE',
+                          'CLEAN_UVCR',
+                          'COMPLETE']
+
 
 class SleepTask(ts.Task):
     def _run(self):
@@ -239,10 +266,15 @@ class TestTaskClient(unittest.TestCase):
 
     def setUp(self):
         self.dbi = FakeDataBaseInterface()
+        self.sg = SpawnerClass()
+        self.sg.config_file = "still_test_paper.cfg"
+        self.wf = WorkFlow()
+        process_client_config_file(self.sg, self.wf)
 
     def test_attributes(self):
-        tc = ts.TaskClient(self.dbi, 'localhost', port=TEST_PORT)
-        self.assertEqual(tc.host_port, ('localhost:TEST_PORT'))
+        # tc = ts.TaskClient(self.dbi, 'localhost', port=TEST_PORT)
+        tc = ts.TaskClient(self.dbi, 'localhost', self.wf, port=TEST_PORT)
+        self.assertEqual(tc.host_port, ('localhost', TEST_PORT))
 
     def test__tx(self):
         self.pkt = ''
@@ -254,7 +286,7 @@ class TestTaskClient(unittest.TestCase):
         thd = threading.Thread(target=s.start)
         thd.start()
         try:
-            tc = ts.TaskClient(self.dbi, 'localhost', port=TEST_PORT, workflow=None)
+            tc = ts.TaskClient(self.dbi, 'localhost', self.wf, port=TEST_PORT)
             tc._tx('UV', 1, ['a', 'b', 'c'])  # Jon : HARDWF
         finally:
             s.shutdown()
@@ -262,8 +294,9 @@ class TestTaskClient(unittest.TestCase):
         self.assertEqual(self.pkt, ('UV', 1, 'localhost', ['a', 'b', 'c']))  # Jon : HARDWF
 
     def test_gen_args(self):
-        tc = ts.TaskClient(self.dbi, 'localhost')
-        for task in sch.FILE_PROCESSING_STAGES[2:-1]:  # Jon : FIXME : HARDWF
+        # tc = ts.TaskClient(self.dbi, 'localhost')
+        tc = ts.TaskClient(self.dbi, 'localhost', self.wf, port=TEST_PORT)
+        for task in FILE_PROCESSING_STAGES[2:-1]:  # Jon : FIXME : HARDWF
             args = tc.gen_args(task, 2)
             if task in ['UVCRE', 'UVCRRE']:  # Jon : HARDWF
                 self.assertEqual(len(args), 3)
@@ -286,8 +319,7 @@ class TestTaskClient(unittest.TestCase):
         thd = threading.Thread(target=s.start)
         thd.start()
         try:
-            tc = ts.TaskClient(self.dbi, 'localhost', workflow=None,
-                               port=TEST_PORT)
+            tc = ts.TaskClient(self.dbi, 'localhost', self.wf, port=TEST_PORT)
             tc.tx('UV', 1)  # Jon : HARDWF
         finally:
             s.shutdown()

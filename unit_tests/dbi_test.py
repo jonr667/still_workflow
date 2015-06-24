@@ -189,7 +189,7 @@ class TestDBI(unittest.TestCase):
         for obs in obsnums:
             float_obsnums.append(float(obs))
 
-        tic = time.time()
+        # tic = time.time()
         observations = self.dbi.list_observations()
         float_observations = []
         for obs in observations:
