@@ -111,6 +111,7 @@ class FakeDataBaseInterface:
     def update_log(self, obsnum, status=None, logtext=None, exit_status=None, append=True):
         return True
 
+
 class TestFunctions(unittest.TestCase):
 
     def test_pad(self):
@@ -329,5 +330,3 @@ class TestTaskClient(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
-

@@ -73,8 +73,9 @@ class NullAction(sch.Action):
 class PopulatedDataBaseInterface(DataBaseInterface):
 
     def __init__(self, nobs, npols, test=True):
-        DataBaseInterface.__init__(self, "", "", "", "", "", "", test=test)
-        # self.dbi = DataBaseInterface("", "", "", "", "", "", test=True)  # Jon: Change me
+        DataBaseInterface.__init__(self, dbhost="localhost", dbport="5432", dbtype="postgresql", dbname="test", dbuser="test", dbpasswd="testme")
+        # DataBaseInterface.__init__(self, "", "", "", "", "", "", test=True)
+
         self.length = 10 / 60. / 24
         self.host = 'localhost'
         self.defaultstatus = 'UV_POT'
@@ -91,8 +92,8 @@ class PopulatedDataBaseInterface(DataBaseInterface):
                 continue
             for jdi in xrange(len(jds)):
                 obsnum = jdpol2obsnum(jdi, pol, self.length)
-
-                obslist.append({'obsnum': obsnum,
+                print("Obsnum : %s   JDI: %s") % (obsnum,jdi)
+                obslist.append({'obsnum': str(obsnum),
                                 'date': jds[jdi],
                                 'date_type': self.date_type,
                                 'pol': pol,
@@ -108,6 +109,7 @@ class PopulatedDataBaseInterface(DataBaseInterface):
 
 
 class FakeDataBaseInterface:
+
     def __init__(self, nfiles=10):
         self.files = {}
         for i in xrange(nfiles):
@@ -143,6 +145,7 @@ class FakeDataBaseInterface:
 
 
 class TestSchedulerDB(unittest.TestCase):
+
     def setUp(self):
         self.ntimes = 10
         self.npols = 4

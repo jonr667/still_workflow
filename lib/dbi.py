@@ -155,7 +155,7 @@ class Cal(Base):
 
 
 class DataBaseInterface(object):
-    def __init__(self, dbhost, dbport, dbtype, dbname, dbuser, dbpasswd, test=False):
+    def __init__(self, dbhost="", dbport="", dbtype="", dbname="", dbuser="", dbpasswd="", test=False):
         """
         Connect to the database and initiate a session creator.
          or
