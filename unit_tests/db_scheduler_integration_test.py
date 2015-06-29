@@ -11,7 +11,7 @@ sys.path.append(basedir + 'bin')
 
 from dbi import jdpol2obsnum
 from dbi import DataBaseInterface
-from dbi import Observation
+
 from still import process_client_config_file, WorkFlow, SpawnerClass
 import scheduler as sch
 from task_server import TaskClient
