@@ -33,6 +33,7 @@ class WorkFlow:
         self.workflow_actions_endfile = ''
         self.prioritize_obs = 0
         self.neighbors = 0
+        self.still_locked_after = ''
 
 
 class SpawnerClass:
@@ -144,6 +145,8 @@ def process_client_config_file(sg, wf):
 
         if config.has_option('WorkFlow', 'prioritize_obs'):
             wf.prioritize_obs = int(config.get('WorkFlow', 'prioritize_obs'))
+        if config.has_option('WorkFlow', 'still_locked_after'):
+            wf.still_locked_after = config.get('WorkFlow', 'still_locked_after')
         if config.has_option('WorkFlow', 'neighbors'):
             wf.neighbors = int(config.get('WorkFlow', 'neighbors'))
 

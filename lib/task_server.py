@@ -54,9 +54,9 @@ class Task:
     def run(self):
         if self.process is not None:
             raise RuntimeError('Cannot run a Task that has been run already.')
-        if self.task == 'UV':  # on first copy of data to still, record in db that obs is assigned here *HARDWF*
-            self.dbi.set_obs_still_host(self.obs, self.still)
-            self.dbi.set_obs_still_path(self.obs, os.path.abspath(self.cwd))
+        # if self.task == 'UV':  # on first copy of data to still, record in db that obs is assigned here *HARDWF*
+        #    self.dbi.set_obs_still_host(self.obs, self.still)
+        #    self.dbi.set_obs_still_path(self.obs, os.path.abspath(self.cwd))
         self.process = self._run()
         self.record_launch()
 
@@ -110,8 +110,8 @@ class Task:
             self.record_completion()
 
     def kill(self):
-#        myproc = psutil.Process(pid=self.process.pid)
-#        print("My Process pid in kill : %s") % myproc.children(recursive=True)
+        # myproc = psutil.Process(pid=self.process.pid)
+        # print("My Process pid in kill : %s") % myproc.children(recursive=True)
         self.record_failure()
         logger.debug('Task.kill Trying to kill: ({task},{obsnum}) pid={pid}'.format(task=self.task, obsnum=self.obs, pid=self.process.pid))
         logger.debug('Task.kill Killing {n} children to prevent orphans: ({task},{obsnum})'.format(n=len(self.process.children(recursive=True)), task=self.task, obsnum=self.obs))
@@ -161,7 +161,7 @@ class TaskClient:
         if not neighbors_base[1] is None:
             neighbors_base[1] = self.dbi.get_input_file(neighbors_base[1])[-1]
 
-        # Jon : closurs are a bit weird but cool
+        # Jon : closurs are a bit weird but cool, should get rid of appendage HARDWF
         def interleave(filename, appendage='cR'):
             # make sure this is in sync with do_X.sh task scripts.
             rv = [filename]
@@ -197,9 +197,9 @@ class TaskClient:
 
 
 class Action(scheduler.Action):
-#    def __init__(self, obs, task, neighbor_status, still, task_clients, timeout=3600.):
-#        scheduler.Action.__init__(self, obs, task, neighbor_status, still, timeout=timeout)
-#        self.task_client = task_clients[still]
+    # def __init__(self, obs, task, neighbor_status, still, task_clients, timeout=3600.):
+        # scheduler.Action.__init__(self, obs, task, neighbor_status, still, timeout=timeout)
+        # self.task_client = task_clients[still]
 
     def _command(self):
         logger.debug('Action: task_client(%s,%d)' % (self.task, self.obs))
@@ -237,8 +237,8 @@ class TaskHandler(SocketServer.BaseRequestHandler):
         task, obs, still, args = self.get_pkt()
         logger.info('TaskHandler.handle: received (%s,%d) with args=%s' % (task, obs, ' '.join(args)))
         if task == 'KILL':
-            self.server.kill(int(args[0]))  # TODO I THINK THIS IS WHERE WE HAVE A PROBLE. RUN and maybe COMPLETE need to clean up existing threads.
-        elif task == 'COMPLETE':  # HARDWF
+            self.server.kill(int(args[0]))  # TODO I THINK THIS IS WHERE WE HAVE A PROBLEM. RUN and maybe COMPLETE need to clean up existing threads.
+        elif task == 'COMPLETE':  # HARDWF, JON: This one should be ok but complete still needs to be in conf file.  Though Maybe just make last thing in conf file what we use here?
             self.server.dbi.set_obs_status(obs, task)
         else:
             t = Task(task, obs, still, args, self.server.dbi, self.server.data_dir)

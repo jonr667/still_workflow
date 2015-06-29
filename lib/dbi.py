@@ -296,7 +296,7 @@ class DataBaseInterface(object):
         s.close()
         return FAILED_OBSNUMS
 
-    def add_observation(self, obsnum, date, date_type, pol, filename, host, outputhost, length=10 / 60. / 24, status='UV_POT'):
+    def add_observation(self, obsnum, date, date_type, pol, filename, host, outputhost, length=10 / 60. / 24, status='UV_POT'):  #HARDWF
         """
         create a new observation entry.
         returns: obsnum  (see jdpol2obsnum)
@@ -327,7 +327,7 @@ class DataBaseInterface(object):
         s.close()  # close the session
         return filenum
 
-    def add_observations(self, obslist, status='UV_POT'):
+    def add_observations(self, obslist, status='UV_POT'):  # HARDWF
         """
         Add a whole set of observations.
         Handles linking neighboring observations.

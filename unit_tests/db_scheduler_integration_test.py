@@ -96,7 +96,7 @@ class PopulatedDataBaseInterface(DataBaseInterface):
                 obsnum = jdpol2obsnum(jdi, pol, self.length)
 #                self.delete_obs(str(obsnum))  # Delete obseration if it exists before adding a new one
 
-                print("Obsnum : %s   JDI: %s") % (obsnum, jdi)
+                # print("Obsnum : %s   JDI: %s") % (obsnum, jdi)
                 obslist.append({'obsnum': str(obsnum),
                                 'outputhost': "UNITTEST",
                                 'date': str(jds[jdi]),
@@ -219,7 +219,7 @@ class TestSchedulerDB(unittest.TestCase):
         s.quit()
         for obsnum in obsnums:
             self.assertEqual(self.dbi.get_obs_status(obsnum), 'COMPLETE')
-        self.dbi.delete_test_obs()
+        # self.dbi.delete_test_obs()
 
     def test_clean_completed_actions(self):
         """

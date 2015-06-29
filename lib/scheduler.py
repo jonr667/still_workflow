@@ -1,34 +1,12 @@
 import time
 import logging
 import sys
+import os
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('scheduler')
 logger.setLevel(logging.DEBUG)
 MAXFAIL = 5  # Jon : move this into config
-# NEW is for db use internally.  Scheduler only ever gets UV_POT and onward from data base
-# Removing the POT_TO_USA step
-# HARDWF
-# FILE_PROCESSING_STAGES = ['NEW', 'UV_POT', 'UV', 'UVC', 'CLEAN_UV', 'UVCR', 'CLEAN_UVC',
-#                           'ACQUIRE_NEIGHBORS', 'UVCRE', 'NPZ', 'UVCRR', 'NPZ_POT', 'CLEAN_UVCRE', 'UVCRRE',
-#                           'CLEAN_UVCRR', 'CLEAN_NPZ', 'CLEAN_NEIGHBORS', 'UVCRRE_POT', 'CLEAN_UVCRRE', 'CLEAN_UVCR',
-#                           'COMPLETE']
-# FILE_PROCESSING_LINKS = {}
-# for i, k in enumerate(FILE_PROCESSING_STAGES[:-1]):
-#     FILE_PROCESSING_LINKS[k] = FILE_PROCESSING_STAGES[i + 1]
-# FILE_PROCESSING_LINKS['COMPLETE'] = None
-# ENDFILE_PROCESSING_LINKS = {}
-# for i, k in enumerate(FILE_PROCESSING_STAGES[:FILE_PROCESSING_STAGES.index('CLEAN_UVC')]):
-#     ENDFILE_PROCESSING_LINKS[k] = FILE_PROCESSING_STAGES[i + 1]
-# ENDFILE_PROCESSING_LINKS['CLEAN_UVC'] = 'CLEAN_UVCR'
-# ENDFILE_PROCESSING_LINKS['CLEAN_UVCR'] = 'COMPLETE'
-
-# FILE_PROCESSING_PREREQS = {  # link task to prerequisite state of neighbors, key not present assumes no prereqs
-#   'ACQUIRE_NEIGHBORS': (FILE_PROCESSING_STAGES.index('UVCR'),
-#                         FILE_PROCESSING_STAGES.index('CLEAN_UVCR')),
-#   'CLEAN_UVCR': (FILE_PROCESSING_STAGES.index('UVCRRE'), None),
-# }
-
 
 class Action:
     '''An Action performs a task on an observation, and is scheduled by a Scheduler.'''
@@ -221,6 +199,13 @@ class Scheduler:
                     self.failcount[str(a.obs) + status] = 0
                 if status == a.task:
                     logger.info('Task %s for obs %s on still %d completed successfully.' % (a.task, a.obs, still))
+                    # Jon: Going to use this space to lock a task to a specific server instead of the taskserver
+                    # this should keep the taskserver more generic to eventually accomidate multiple workflows simultaniously
+                    print("Status : %s, still_locked_after %s") % (status, self.wf.still_locked_after)
+                    if status == self.wf.still_locked_after:  # on first copy of data to still, record in db that obs is assigned here *HARDWF*
+                        dbi.set_obs_still_host(a.obs, a.still)
+                        # dbi.set_obs_still_path(a.obs, os.path.abspath(self.cwd))  # Jon: Not sure how to get this over yet *FIXME*
+                        print("Locking to server OBS: %s , server : %s") % (a.obs,a.still)
                     # not adding to updated_actions removes this from list of launched actions
                 elif a.timed_out():
                     logger.info('Task %s for obs %s on still %d TIMED OUT.' % (a.task, a.obs, still))
@@ -253,9 +238,7 @@ class Scheduler:
         # to ensure ordering
         # Jon: Change this so that it lets the database select all the recoreds that
         # are not complete or we could be loading in thousands of records for this
-#        for f in dbi.list_observations():  # Jon: Lets change this from dbi.list_observations to one that only grabs non COMPLETE obsid's
         for open_obs in dbi.list_open_observations():  # Jon: replaced the above with this one that throws out NEW and COMPLETE obsid's
-            # if dbi.get_obs_status(f) != 'COMPLETE' and not self._active_obs_dict.has_key(f):  # HARDWF Jon: I think I'm ok with this hardcode, need to rewrite, don't need to check complete
             if open_obs not in self._active_obs_dict:
                     self._active_obs_dict[open_obs] = len(self.active_obs)
                     self.active_obs.append(open_obs)
