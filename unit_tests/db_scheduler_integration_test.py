@@ -11,6 +11,7 @@ sys.path.append(basedir + 'bin')
 
 from dbi import jdpol2obsnum
 from dbi import DataBaseInterface
+from dbi import Observation
 from still import process_client_config_file, WorkFlow, SpawnerClass
 import scheduler as sch
 from task_server import TaskClient
@@ -80,6 +81,7 @@ class PopulatedDataBaseInterface(DataBaseInterface):
         self.host = 'localhost'
         self.defaultstatus = 'UV_POT'
         self.date_type = 'julian'
+        self.delete_test_obs()
         self.Add_Fake_Observations(nobs, npols)
 
     def Add_Fake_Observations(self, nobs, npols):
@@ -92,9 +94,12 @@ class PopulatedDataBaseInterface(DataBaseInterface):
                 continue
             for jdi in xrange(len(jds)):
                 obsnum = jdpol2obsnum(jdi, pol, self.length)
-                print("Obsnum : %s   JDI: %s") % (obsnum,jdi)
+#                self.delete_obs(str(obsnum))  # Delete obseration if it exists before adding a new one
+
+                print("Obsnum : %s   JDI: %s") % (obsnum, jdi)
                 obslist.append({'obsnum': str(obsnum),
-                                'date': jds[jdi],
+                                'outputhost': "UNITTEST",
+                                'date': str(jds[jdi]),
                                 'date_type': self.date_type,
                                 'pol': pol,
                                 'host': self.host,
@@ -214,6 +219,7 @@ class TestSchedulerDB(unittest.TestCase):
         s.quit()
         for obsnum in obsnums:
             self.assertEqual(self.dbi.get_obs_status(obsnum), 'COMPLETE')
+        self.dbi.delete_test_obs()
 
     def test_clean_completed_actions(self):
         """

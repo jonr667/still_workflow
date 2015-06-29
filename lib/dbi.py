@@ -77,8 +77,6 @@ def gethostname():
 ########
 
 neighbors = Table("neighbors", Base.metadata,
-                  # Column("low_neighbor_id", BigInteger, ForeignKey("observation.obsnum"), primary_key=True),
-                  # Column("high_neighbor_id", BigInteger, ForeignKey("observation.obsnum"), primary_key=True)
                   Column("low_neighbor_id", String(100), ForeignKey("observation.obsnum"), primary_key=True),
                   Column("high_neighbor_id", String(100), ForeignKey("observation.obsnum"), primary_key=True)
                   )
@@ -108,8 +106,9 @@ class Observation(Base):
                                   secondary=neighbors,
                                   primaryjoin=obsnum == neighbors.c.low_neighbor_id,
                                   secondaryjoin=obsnum == neighbors.c.high_neighbor_id,
-                                  backref="low_neighbors")
-
+                                  backref="low_neighbors",
+                                  cascade="all, delete-orphan",
+                                  single_parent=True)
 
 class File(Base):
     __tablename__ = 'file'
@@ -120,14 +119,14 @@ class File(Base):
     obsnum = Column(String(100), ForeignKey('observation.obsnum'))
     # this next line creates an attribute Observation.files which is the list of all
     #  files associated with this observation
-    observation = relationship(Observation, backref=backref('files', uselist=True))
+    observation = relationship(Observation, backref=backref('files', uselist=True), cascade="all, delete-orphan", single_parent=True)
     md5sum = Column(Integer)
 
 
 class Log(Base):
     __tablename__ = 'log'
     lognum = Column(Integer, primary_key=True)
-    obsnum = Column(BigInteger, ForeignKey('observation.obsnum'))
+#    obsnum = Column(BigInteger, ForeignKey('observation.obsnum'))
     obsnum = Column(String(100), ForeignKey('observation.obsnum'))
     # Jon: There may be a very good reason to not just make this a string and I'm sure I will find out what it is soon enough
     stage = Column(String(200))
@@ -151,7 +150,7 @@ class Cal(Base):
     output_dir = Column(Text)
     input_file = Column(Text)
     logtext = Column(Text)
-    observation = relationship(Observation, backref=backref('cals', uselist=True))
+    observation = relationship(Observation, backref=backref('cals', uselist=True), cascade="all, delete-orphan", single_parent=True)
 
 
 class DataBaseInterface(object):
@@ -297,13 +296,13 @@ class DataBaseInterface(object):
         s.close()
         return FAILED_OBSNUMS
 
-    def add_observation(self, obsnum, date, date_type, pol, filename, host, length=10 / 60. / 24, status='UV_POT'):
+    def add_observation(self, obsnum, date, date_type, pol, filename, host, outputhost, length=10 / 60. / 24, status='UV_POT'):
         """
         create a new observation entry.
         returns: obsnum  (see jdpol2obsnum)
         Note: does not link up neighbors!
         """
-        OBS = Observation(obsnum=obsnum, date=date, date_type=date_type, pol=pol, status=status, length=length)
+        OBS = Observation(obsnum=obsnum, date=date, date_type=date_type, pol=pol, status=status, outputhost=outputhost, length=length)
         s = self.Session()
         s.add(OBS)
         s.commit()
@@ -350,7 +349,7 @@ class DataBaseInterface(object):
         for obs in obslist:
 
             obsnum = self.add_observation(obs['obsnum'], obs['date'], obs['date_type'], obs['pol'],
-                                          obs['filename'], obs['host'],
+                                          obs['filename'], obs['host'], obs['outputhost'],
                                           length=obs['length'], status='NEW')
             neighbors[obsnum] = (obs.get('neighbor_low', None), obs.get('neighbor_high', None))
         s = self.Session()
@@ -358,12 +357,12 @@ class DataBaseInterface(object):
             OBS = s.query(Observation).filter(Observation.obsnum == middleobsnum).one()
             if not neighbors[middleobsnum][0] is None:
                 L = s.query(Observation).filter(
-                    Observation.date == neighbors[middleobsnum][0],
+                    Observation.date == str(neighbors[middleobsnum][0]),
                     Observation.pol == OBS.pol).one()
                 OBS.low_neighbors = [L]
             if not neighbors[middleobsnum][1] is None:
                 H = s.query(Observation).filter(
-                    Observation.date == neighbors[middleobsnum][1],
+                    Observation.date == str(neighbors[middleobsnum][1]),
                     Observation.pol == OBS.pol).one()
                 OBS.high_neighbors = [H]
                 sys.stdout.flush()
@@ -372,6 +371,27 @@ class DataBaseInterface(object):
             s.commit()
         s.close()
         return neighbors.keys()
+
+    def delete_test_obs(self):
+        s = self.Session()
+        obsnums = [obs.obsnum for obs in s.query(Observation).filter(Observation.outputhost == 'UNITTEST')]
+        for obsnum in obsnums:
+            self.delete_obs(obsnum)
+
+    def delete_obs(self, obsnum):
+        #
+        # Delete an obseration and its associated entri in File table
+        #
+
+        s = self.Session()
+
+        try:
+            OBS = s.query(Observation).filter(Observation.obsnum == obsnum).one()
+            s.delete(OBS)
+            s.commit()
+        except:
+            pass
+        s.close()
 
     def get_neighbors(self, obsnum):
         """
