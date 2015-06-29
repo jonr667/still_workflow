@@ -201,12 +201,12 @@ class Scheduler:
                     logger.info('Task %s for obs %s on still %d completed successfully.' % (a.task, a.obs, still))
                     # Jon: Going to use this space to lock a task to a specific server instead of the taskserver
                     # this should keep the taskserver more generic to eventually accomidate multiple workflows simultaniously
-                    print("Status : %s, still_locked_after %s") % (status, self.wf.still_locked_after)
-                    if status == self.wf.still_locked_after:  # on first copy of data to still, record in db that obs is assigned here *HARDWF*
+
+                    # not adding to updated_actions removes this from list of launched actions
+                    if status == self.wf.still_locked_after:  # on first copy of data to still, record in db that obs is assigned here
                         dbi.set_obs_still_host(a.obs, a.still)
                         # dbi.set_obs_still_path(a.obs, os.path.abspath(self.cwd))  # Jon: Not sure how to get this over yet *FIXME*
-                        print("Locking to server OBS: %s , server : %s") % (a.obs,a.still)
-                    # not adding to updated_actions removes this from list of launched actions
+
                 elif a.timed_out():
                     logger.info('Task %s for obs %s on still %d TIMED OUT.' % (a.task, a.obs, still))
                     self.kill_action(a)
