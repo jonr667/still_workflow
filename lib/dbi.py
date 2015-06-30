@@ -375,9 +375,8 @@ class DataBaseInterface(object):
         s = self.Session()
         for middleobsnum in neighbors:
             OBS = s.query(Observation).filter(Observation.obsnum == middleobsnum).one()
-            print(OBS)
             if neighbors[middleobsnum][0] is not None:
-                print(neighbors[middleobsnum][0])
+
                 L = s.query(Observation).filter(
                     Observation.date == str(neighbors[middleobsnum][0]),
                     Observation.pol == OBS.pol).one()
@@ -397,10 +396,9 @@ class DataBaseInterface(object):
     def delete_test_obs(self):
         s = self.Session()
         obsnums = [obs.obsnum for obs in s.query(Observation).filter(Observation.outputhost == "UNITTEST")]
-        for obsnum in obsnums:
-            print("delete obsnum : %s") % obsnum
-            self.delete_obs(obsnum)
         s.close()
+        for obsnum in obsnums:
+            self.delete_obs(obsnum)
 
     def delete_obs(self, obsnum):
         #
@@ -408,13 +406,24 @@ class DataBaseInterface(object):
         # Jon: Does not seem to want to auto delete assocaited file, need to fix
 
         s = self.Session()
+        obslist = s.query(Log).filter(Log.obsnum == obsnum)
+        for obs in obslist:
+            s.delete(obs)
+            s.commit()
+        obslist = s.query(File).filter(File.obsnum == obsnum)
+        for obs in obslist:
+            s.delete(obs)
+            s.commit()
+ #       except:
+ #           pass
+
         try:
-            OBS = s.query(Observation).filter(Observation.obsnum == obsnum).first()
+            OBS = s.query(Observation).filter(Observation.obsnum == obsnum).one()
             s.delete(OBS)
             s.commit()
         except:
-            print("Could not delete obsid : %s") % obsnum
             pass
+
         s.close()
 
     def get_neighbors(self, obsnum):

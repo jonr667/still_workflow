@@ -52,7 +52,7 @@ class TestDBI(unittest.TestCase):
         self.pol = 'xx'
         self.filename = '/data0/zen.2456785.123456.uv'
         self.host = 'pot0'
-        self.length = 10.16639 / 60. / 24
+        self.length = 10 / 60. / 24
         self.date_type = 'julian'
         self.obsnum = jdpol2obsnum(self.jd, self.pol, self.length)
 
@@ -148,22 +148,23 @@ class TestDBI(unittest.TestCase):
         for pol in pols:
             for jdi in xrange(len(jds)):
                 obsnum = jdpol2obsnum(jdi, pol, self.length)
-                obslist.append({'obsnum': obsnum,
-                                'date': jds[jdi],
+                self.dbi.delete_obs(str(obsnum))  # Delete obseration if it exists before adding a new one
+                obslist.append({'obsnum': str(obsnum),
+                                'outputhost': "UNITTEST",
+                                'date': str(jds[jdi]),
                                 'date_type': self.date_type,
                                 'pol': pol,
                                 'host': self.host,
                                 'filename': self.filename,
                                 'length': self.length,
-                                'status': 'UV_POT',
-                                'outputhost': 'UNITTEST'})
+                                'status': 'UV_POT'})
                 if jdi != 0:
                     obslist[-1]['neighbor_low'] = jds[jdi - 1]
                 if jdi < len(jds[:-1]):
                     obslist[-1]['neighbor_high'] = jds[jdi + 1]
-        obsnums = self.dbi.add_observations(obslist)
+        obsnums = self.dbi.add_observations(obslist, status='UV_POT')
         nobs = self.session.query(func.count(Observation.obsnum)).scalar()
-        self.assertEqual(len(obslist), nobs)  # did we add observations?
+        self.assertEqual(len(obslist) + 1, int(nobs))  # did we add observations?
         # did they get the proper neighbor assignments
         for obsnum in obsnums:
             OBS = self.session.query(Observation).filter(Observation.obsnum == obsnum).one()
@@ -171,9 +172,9 @@ class TestDBI(unittest.TestCase):
             for obs in obslist:
                 if float(obs['date']) == float(OBS.date):
                     if 'neighbor_low' in obs:
-                        self.assertEqual(float(OBS.low_neighbors[0].date), obs['neighbor_low'])
+                        self.assertEqual(float(OBS.low_neighbors[0].date), round(float(obs['neighbor_low']), 5))
                     if 'neighbor_high' in obs:
-                        self.assertEqual(float(OBS.high_neighbors[0].date), obs['neighbor_high'])
+                        self.assertEqual(float(OBS.high_neighbors[0].date), round(float(obs['neighbor_high']), 5))
                     break
 
     def test_list_observations(self):
@@ -184,14 +185,16 @@ class TestDBI(unittest.TestCase):
         for pol in pols:
             for jdi in xrange(len(jds)):
                 obsnum = jdpol2obsnum(jdi, pol, self.length)
-                obslist.append({'obsnum': obsnum,
-                                'date': jds[jdi],
+                self.dbi.delete_obs(str(obsnum))  # Delete obseration if it exists before adding a new one
+                obslist.append({'obsnum': str(obsnum),
+                                'outputhost': "UNITTEST",
+                                'date': str(jds[jdi]),
                                 'date_type': self.date_type,
                                 'pol': pol,
                                 'host': self.host,
                                 'filename': self.filename,
-                                'outputhost': 'UNITTEST',
-                                'length': self.length})
+                                'length': self.length,
+                                'status': 'UV_POT'})
                 if jdi != 0:
                     obslist[-1]['neighbor_low'] = jds[jdi - 1]
                 if jdi < len(jds[:-1]):
@@ -218,19 +221,19 @@ class TestDBI(unittest.TestCase):
         obslist = []
         jds = n.arange(0, 10) * self.length + 2456446.1234
         pols = ['xx', 'yy', 'xy', 'yx']
-        for pol in pols:
+        for i, pol in enumerate(pols):
             for jdi in xrange(len(jds)):
                 obsnum = jdpol2obsnum(jdi, pol, self.length)
-                self.delete_obs(str(obsnum))  # Delete obseration if it exists before adding a new one
-                obslist.append({'obsnum': obsnum,
-                                'date': jds[jdi],
+                self.dbi.delete_obs(str(obsnum))  # Delete obseration if it exists before adding a new one
+                obslist.append({'obsnum': str(obsnum),
+                                'outputhost': "UNITTEST",
+                                'date': str(jds[jdi]),
                                 'date_type': self.date_type,
                                 'pol': pol,
                                 'host': self.host,
                                 'filename': self.filename,
                                 'length': self.length,
-                                'outputhost': 'UNITTEST',
-                                'status': 'NEW'})
+                                'status': 'UV_POT'})
                 if jdi != 0:
                     obslist[-1]['neighbor_low'] = jds[jdi - 1]
                 if jdi != (len(jds) - 1):
@@ -253,7 +256,8 @@ class TestDBI(unittest.TestCase):
         under the hood stuff
         """
         # first create an observation in the first place
-        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host)
+#        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host)
+        obsnum = self.add_an_obs()
         # then set the status to something else
         self.dbi.set_obs_status(obsnum, 'UV')
         # get the status back out
