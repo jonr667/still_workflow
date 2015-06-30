@@ -136,6 +136,7 @@ class Log(Base):
     exit_status = Column(Integer)
     timestamp = Column(DateTime, nullable=False, default=func.current_timestamp())
     logtext = Column(Text)
+    observation = relationship(Observation, backref=backref('logs', uselist=True), cascade="all, delete-orphan", single_parent=True)
 
 
 # note the Cal object/table is added here
@@ -314,7 +315,7 @@ class DataBaseInterface(object):
         s.close()
         return FAILED_OBSNUMS
 
-    def add_observation(self, obsnum, date, date_type, pol, filename, host, outputhost, length=10 / 60. / 24, status=''):
+    def add_observation(self, obsnum, date, date_type, pol, filename, host, outputhost='', length=10 / 60. / 24, status='NEW'):
         """
         create a new observation entry.
         returns: obsnum  (see jdpol2obsnum)
@@ -365,15 +366,18 @@ class DataBaseInterface(object):
         """
         neighbors = {}
         for obs in obslist:
-
             obsnum = self.add_observation(obs['obsnum'], obs['date'], obs['date_type'], obs['pol'],
-                                          obs['filename'], obs['host'], obs['outputhost'],
-                                          length=obs['length'], status='NEW')
+                                          obs['filename'], obs['host'], outputhost=obs['outputhost'],
+                                          length=obs['length'], status=obs['status'])
+
             neighbors[obsnum] = (obs.get('neighbor_low', None), obs.get('neighbor_high', None))
+
         s = self.Session()
         for middleobsnum in neighbors:
             OBS = s.query(Observation).filter(Observation.obsnum == middleobsnum).one()
-            if not neighbors[middleobsnum][0] is None:
+            print(OBS)
+            if neighbors[middleobsnum][0] is not None:
+                print(neighbors[middleobsnum][0])
                 L = s.query(Observation).filter(
                     Observation.date == str(neighbors[middleobsnum][0]),
                     Observation.pol == OBS.pol).one()
@@ -392,9 +396,11 @@ class DataBaseInterface(object):
 
     def delete_test_obs(self):
         s = self.Session()
-        obsnums = [obs.obsnum for obs in s.query(Observation).filter(Observation.outputhost == 'UNITTEST')]
+        obsnums = [obs.obsnum for obs in s.query(Observation).filter(Observation.outputhost == "UNITTEST")]
         for obsnum in obsnums:
+            print("delete obsnum : %s") % obsnum
             self.delete_obs(obsnum)
+        s.close()
 
     def delete_obs(self, obsnum):
         #
@@ -402,12 +408,12 @@ class DataBaseInterface(object):
         # Jon: Does not seem to want to auto delete assocaited file, need to fix
 
         s = self.Session()
-
         try:
-            OBS = s.query(Observation).filter(Observation.obsnum == obsnum).one()
+            OBS = s.query(Observation).filter(Observation.obsnum == obsnum).first()
             s.delete(OBS)
             s.commit()
         except:
+            print("Could not delete obsid : %s") % obsnum
             pass
         s.close()
 

@@ -45,8 +45,8 @@ class TestDBI(unittest.TestCase):
         create an in memory DB and open a connection to it
         """
         # filename = os.path.dirname(__file__) + '/../configs/test.cfg'
-
-        self.dbi = DataBaseInterface("", "", "", "", "", "", test=True)  # Jon: Change me
+        self.dbi = DataBaseInterface(dbhost="localhost", dbport="5432", dbtype="postgresql", dbname="test", dbuser="test", dbpasswd="testme")
+        #self.dbi = DataBaseInterface("", "", "", "", "", "", test=True)  # Jon: Change me
         self.session = self.dbi.Session()
         self.jd = 2456892.20012000
         self.pol = 'xx'
@@ -56,15 +56,21 @@ class TestDBI(unittest.TestCase):
         self.date_type = 'julian'
         self.obsnum = jdpol2obsnum(self.jd, self.pol, self.length)
 
+    def add_an_obs(self):
+        self.dbi.delete_test_obs()
+        obsnum = self.dbi.add_observation(str(self.obsnum), self.jd, self.date_type, self.pol, self.filename, self.host, length=self.length, status="NEW", outputhost="UNITTEST")
+
+        return obsnum
+
     def test_add_log(self):
-        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host, length=self.length)
+        obsnum = self.add_an_obs()
         self.dbi.add_log(obsnum, 'UV', 'test123', 0)
         logtext = self.dbi.get_logs(obsnum)
         self.assertEqual(logtext.strip(), 'test123')
         LOG = self.session.query(Log).filter(Log.obsnum == obsnum).one()
 
     def test_update_log(self):
-        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host, length=self.length)
+        obsnum = self.add_an_obs()
         self.dbi.add_log(obsnum, 'UV', 'test123', None)
         logtext = self.dbi.get_logs(obsnum)
         self.assertEqual(logtext.strip(), 'test123')
@@ -88,7 +94,9 @@ class TestDBI(unittest.TestCase):
         delta = n.diff(obsnums)
         for d in delta:
             self.assertEqual(d, 1)
-        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host, length=self.length)
+        obsnum = self.add_an_obs()
+
+        # obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host, length=self.length, status='NEW')
         self.assertEqual(float(obsnum), jdpol2obsnum(self.jd, self.pol, self.length))
 
     def test_add_observation(self):
@@ -97,8 +105,9 @@ class TestDBI(unittest.TestCase):
         basically tests the same as test_Observation_and_file
         but with the dbi wrapper
         """
+        obsnum = self.add_an_obs()
 
-        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host, length=self.length)
+        # obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host, length=self.length, status='NEW')
         OBS = self.session.query(Observation).filter(Observation.obsnum == obsnum).one()
         self.assertEqual(float(OBS.date), self.jd)
         self.assertEqual(float(OBS.obsnum), jdpol2obsnum(self.jd, self.pol, self.length))
@@ -107,8 +116,9 @@ class TestDBI(unittest.TestCase):
         """
         todo update from code
         """
-        # first add the observation
-        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host)
+        # first add the observatio
+        obsnum = self.add_an_obs()
+#        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host, '', '')
         # then add a file to it
         filenum = self.dbi.add_file(obsnum, self.host, self.filename + 'cRRE')
         # then grab the file record back
@@ -118,7 +128,8 @@ class TestDBI(unittest.TestCase):
 
     def test_add_files(self):
         # first add the observation
-        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host, self.length)
+        obsnum = self.add_an_obs()
+        # obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host, self.length, status='NEW')
 
         # add two subsequent products
         files = ['/data0/zen.2456785.123456.uvc', '/data0/zen.2456785.323456.uvcR']
@@ -137,14 +148,15 @@ class TestDBI(unittest.TestCase):
         for pol in pols:
             for jdi in xrange(len(jds)):
                 obsnum = jdpol2obsnum(jdi, pol, self.length)
-
                 obslist.append({'obsnum': obsnum,
                                 'date': jds[jdi],
                                 'date_type': self.date_type,
                                 'pol': pol,
                                 'host': self.host,
                                 'filename': self.filename,
-                                'length': self.length})
+                                'length': self.length,
+                                'status': 'UV_POT',
+                                'outputhost': 'UNITTEST'})
                 if jdi != 0:
                     obslist[-1]['neighbor_low'] = jds[jdi - 1]
                 if jdi < len(jds[:-1]):
@@ -178,6 +190,7 @@ class TestDBI(unittest.TestCase):
                                 'pol': pol,
                                 'host': self.host,
                                 'filename': self.filename,
+                                'outputhost': 'UNITTEST',
                                 'length': self.length})
                 if jdi != 0:
                     obslist[-1]['neighbor_low'] = jds[jdi - 1]
@@ -208,13 +221,16 @@ class TestDBI(unittest.TestCase):
         for pol in pols:
             for jdi in xrange(len(jds)):
                 obsnum = jdpol2obsnum(jdi, pol, self.length)
+                self.delete_obs(str(obsnum))  # Delete obseration if it exists before adding a new one
                 obslist.append({'obsnum': obsnum,
                                 'date': jds[jdi],
                                 'date_type': self.date_type,
                                 'pol': pol,
                                 'host': self.host,
                                 'filename': self.filename,
-                                'length': self.length})
+                                'length': self.length,
+                                'outputhost': 'UNITTEST',
+                                'status': 'NEW'})
                 if jdi != 0:
                     obslist[-1]['neighbor_low'] = jds[jdi - 1]
                 if jdi != (len(jds) - 1):
@@ -249,7 +265,8 @@ class TestDBI(unittest.TestCase):
         set the status with the dbi function (cause I tested it with more basic tests already)
         """
         # first create an observation in the first place
-        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host)
+#        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host)
+        obsnum = self.add_an_obs()
         # then set the status to something else
         self.dbi.set_obs_status(obsnum, 'UV')
         # then get the status back
@@ -262,7 +279,8 @@ class TestDBI(unittest.TestCase):
         """
         """
         # first create an observation in the first place
-        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host)
+        obsnum = self.add_an_obs()
+#        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host)
         # then set the status to something else
         tic = time.time()
         self.dbi.set_obs_status(obsnum, 'UV')
@@ -275,7 +293,8 @@ class TestDBI(unittest.TestCase):
         get the pot host and path
         """
         # first add the observation
-        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host)
+        obsnum = self.add_an_obs()
+#        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host)
         # then add a file to it
         host, path, filename = self.dbi.get_input_file(obsnum)
         self.assertEqual(host, self.host)
@@ -289,7 +308,8 @@ class TestDBI(unittest.TestCase):
         get the pot host and path
         """
         # first add the observation
-        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host)
+        obsnum = self.add_an_obs()
+#        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host)
         host, path = self.dbi.get_output_location(obsnum)
         self.assertEqual(host, self.host)
         self.assertEqual(path, os.path.dirname(self.filename))
@@ -297,7 +317,8 @@ class TestDBI(unittest.TestCase):
     def test_still_path(self):
         """
         """
-        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host)
+        obsnum = self.add_an_obs()
+#        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host)
         self.dbi.set_obs_still_path(obsnum, '/data/')
         still_path = self.dbi.get_obs_still_path(obsnum)
         self.assertEqual(still_path, '/data/')
@@ -305,7 +326,8 @@ class TestDBI(unittest.TestCase):
     def test_obs_pid(self):
         """
         """
-        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host)
+        obsnum = self.add_an_obs()
+#        obsnum = self.dbi.add_observation(self.obsnum, self.jd, self.date_type, self.pol, self.filename, self.host)
         self.dbi.set_obs_pid(obsnum, 9999)
         pid = self.dbi.get_obs_pid(obsnum)
         self.assertEqual(pid, 9999)

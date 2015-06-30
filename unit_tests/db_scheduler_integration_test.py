@@ -94,7 +94,7 @@ class PopulatedDataBaseInterface(DataBaseInterface):
                 continue
             for jdi in xrange(len(jds)):
                 obsnum = jdpol2obsnum(jdi, pol, self.length)
-#                self.delete_obs(str(obsnum))  # Delete obseration if it exists before adding a new one
+                self.delete_obs(str(obsnum))  # Delete obseration if it exists before adding a new one
 
                 obslist.append({'obsnum': str(obsnum),
                                 'outputhost': "UNITTEST",
