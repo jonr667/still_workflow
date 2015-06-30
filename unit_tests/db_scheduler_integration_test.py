@@ -18,7 +18,7 @@ from task_server import TaskClient
 import numpy as n
 # from sqlalchemy.orm.exc import NoResultFound
 
-logger = logging.basicConfig(level=logging.INFO)
+# logger = logging.basicConfig(level=logging.INFO)
 TEST_PORT = 14204
 FILE_PROCESSING_STAGES = ['NEW',
                           'UV_POT',
@@ -96,7 +96,6 @@ class PopulatedDataBaseInterface(DataBaseInterface):
                 obsnum = jdpol2obsnum(jdi, pol, self.length)
 #                self.delete_obs(str(obsnum))  # Delete obseration if it exists before adding a new one
 
-                # print("Obsnum : %s   JDI: %s") % (obsnum, jdi)
                 obslist.append({'obsnum': str(obsnum),
                                 'outputhost': "UNITTEST",
                                 'date': str(jds[jdi]),
@@ -104,13 +103,14 @@ class PopulatedDataBaseInterface(DataBaseInterface):
                                 'pol': pol,
                                 'host': self.host,
                                 'filename': 'zen.{jd}.uv'.format(jd=n.round(jds[jdi], 5)),
-                                'length': self.length})
+                                'length': self.length,
+                                'status': self.defaultstatus})
 
                 if jdi != 0:
                     obslist[-1]['neighbor_low'] = jds[jdi - 1]
                 if jdi < len(jds[:-1]):
                     obslist[-1]['neighbor_high'] = jds[jdi + 1]
-        obsnums = self.add_observations(obslist, status=self.defaultstatus)
+        self.add_observations(obslist, status=self.defaultstatus)
 
 
 class FakeDataBaseInterface:

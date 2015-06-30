@@ -11,9 +11,10 @@ sys.path.append(basedir + 'lib')
 
 import add_observations
 
-from dbi import DataBaseInterface
-from dbi import Observation
-from dbi import logger
+# from dbi import DataBaseInterface
+# from dbi import Observation
+
+import dbi
 from scheduler import Scheduler
 from task_server import TaskServer
 from task_server import TaskClient
@@ -34,6 +35,7 @@ class WorkFlow:
         self.prioritize_obs = 0
         self.neighbors = 0
         self.still_locked_after = ''
+#        self.start_trigger_status_state = ''
 
 
 class SpawnerClass:
@@ -74,7 +76,7 @@ class StillScheduler(Scheduler):
         return
 
 
-class StillDataBaseInterface(DataBaseInterface):
+class StillDataBaseInterface(dbi.DataBaseInterface):
     #
     # Overload DataBaseInterface class from still to be able to modify some functions
     #
@@ -82,7 +84,7 @@ class StillDataBaseInterface(DataBaseInterface):
         #
         # Overloading the existing class function to get MWA data in, though this might be generic enough to backport
         #
-        OBS = Observation(obsnum=obsnum, date=date, date_type=date_type, pol=0, status=status, length=length)
+        OBS = dbi.Observation(obsnum=obsnum, date=date, date_type=date_type, pol=0, status=status, length=length)
         print(OBS.obsnum)
         s = self.Session()
         try:
@@ -147,6 +149,8 @@ def process_client_config_file(sg, wf):
             wf.prioritize_obs = int(config.get('WorkFlow', 'prioritize_obs'))
         if config.has_option('WorkFlow', 'still_locked_after'):
             wf.still_locked_after = config.get('WorkFlow', 'still_locked_after')
+        # if config.has_option('WorkFlow', 'start_trigger_status_state'):
+        #     wf.start_trigger_status_state = config.get('WorkFlow', 'start_trigger_status_state')
         if config.has_option('WorkFlow', 'neighbors'):
             wf.neighbors = int(config.get('WorkFlow', 'neighbors'))
 
@@ -178,11 +182,11 @@ def main_client(sg, wf, args):
     except:
         print("We could not run a test on the database and are aborting.  Please check the DBI DB config")
         sys.exit(1)
- #   add_observations.ingest_addtional_opsids(sg)
-#    obsid = 1062453568
-#    add_observations.get_all_nags_files_for_obsid(sg, obsid)
+    # add_observations.ingest_addtional_opsids(sg)
+    #    obsid = 1062453568
+    #    add_observations.get_all_nags_files_for_obsid(sg, obsid)
     #    sync_new_ops_from_ngas_to_still(sg)  # Lets get started and get a batch of new observations and push them into the db
- #   sys.exit(0)
+    #   sys.exit(0)
     STILLS = sg.hosts
 
     ACTIONS_PER_STILL = sg.actions_per_still  # how many actions that run in parallel on a still

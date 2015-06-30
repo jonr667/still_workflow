@@ -11,7 +11,7 @@ basedir = os.path.dirname(os.path.realpath(__file__)).replace("unit_tests", "")
 sys.path.append(basedir + 'lib')
 sys.path.append(basedir + 'bin')
 
-import scheduler as sch
+# import scheduler as sch
 import task_server as ts
 
 logging.basicConfig(level=logging.DEBUG)

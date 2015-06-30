@@ -1,12 +1,14 @@
 import time
-import logging
 import sys
-import os
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger('scheduler')
-logger.setLevel(logging.DEBUG)
+from still_shared import logger
+
+# logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# logger = logging.getLogger('scheduler')
+# logger.setLevel(logging.DEBUG)
+
 MAXFAIL = 5  # Jon : move this into config
+
 
 class Action:
     '''An Action performs a task on an observation, and is scheduled by a Scheduler.'''
@@ -42,9 +44,7 @@ class Action:
 
         try:
             index1, index2 = self.wf.workflow_actions.index(self.wf.action_prereqs[self.task])
-            print("Got indexes for try in has_prerequisites")
         except:
-            print("Failed to get indexes from try in has_prerequisites")
             return True
 
         print("has_prerequisites : Task : %s - Index1 : %s - Index2 : %s") % (self.task, self.wf.workflow_actions[index1], self.wf.workflow_actions[index2])
@@ -52,18 +52,15 @@ class Action:
 
         for status_of_neighbor in self.neighbor_status:
             if status_of_neighbor is None:  # indicates that obs hasn't been entered into DB yet
-                print("Due to STATUS_OF_NEIGHBOR has_prereqs is FALSE")
                 return False
-            # index_of_neighbor_status = FILE_PROCESSING_STAGES.index(status_of_neighbor)
+
             index_of_neighbor_status = self.wf.workflow_actions.index(status_of_neighbor)
             if index1 is not None and index_of_neighbor_status < index1:
-                print("Due to index1 has_prereqs is FALSE")
                 return False
             if index2 is not None and index_of_neighbor_status >= index2:
-                print("Due to index2 has_prereqs is FALSE")
                 return False
             # logger.debug('Action.has_prerequisites: (%s,%d) prerequisites met' % (self.task, self.obs))
-            print("Has_prereqs TRUE : Index1 : %s   INdex2: %s") % (index1, index2)
+
         return True
 
     def launch(self, launch_time=None):
@@ -164,12 +161,8 @@ class Scheduler:
 
     def pop_action_queue(self, still, tx=False):
         '''Return highest priority action for the given still.'''
-  #      print("My action queue: %s") % self.action_queue
         for i in xrange(len(self.action_queue)):
             a = self.action_queue[i]
-#            print("Action Queue from pop_action_queue %s") % a
-#            print("A.still %s, Still: %s") % (a.still, still)
-#            print("A.is_transfer %s, TX: %s") % (a.is_transfer, tx)
             if a.still == still and a.is_transfer == tx:
                 return self.action_queue.pop(i)
         raise IndexError('No actions available for still : %d\n' % still)
@@ -238,7 +231,11 @@ class Scheduler:
         # to ensure ordering
         # Jon: Change this so that it lets the database select all the recoreds that
         # are not complete or we could be loading in thousands of records for this
-        for open_obs in dbi.list_open_observations():  # Jon: replaced the above with this one that throws out NEW and COMPLETE obsid's
+        observations = dbi.list_open_observations()
+
+#        for open_obs in dbi.list_open_observations():  # Jon: replaced the above with this one that throws out NEW and COMPLETE obsid's
+        for open_obs in observations:  # Jon: replaced the above with this one that throws out NEW and COMPLETE obsid'self
+
             if open_obs not in self._active_obs_dict:
                     self._active_obs_dict[open_obs] = len(self.active_obs)
                     self.active_obs.append(open_obs)
@@ -330,5 +327,4 @@ class Scheduler:
         '''Return the still that a obs should be transferred to.'''
 
         mystill = (int(obs) / self.blocksize) % self.nstills
-     #   print("My still : %s : from obs_to_still with obs : %s : blocksize : %s : nstills: %s :") % (mystill, obs, self.blocksize, self.nstills)
         return mystill

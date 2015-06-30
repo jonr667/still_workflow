@@ -13,12 +13,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 # from sqlalchemy.pool import QueuePool
 
+from still_shared import logger
 
 # Based on example here: http://www.pythoncentral.io/overview-sqlalchemys-expression-language-orm-queries/
 Base = declarative_base()
 
 # Jon : Not sure why the logger is defined here?
-logger = logging.getLogger('dbi')
+# logger = logging.getLogger('dbi')
 
 
 #########
@@ -110,6 +111,7 @@ class Observation(Base):
                                   cascade="all, delete-orphan",
                                   single_parent=True)
 
+
 class File(Base):
     __tablename__ = 'file'
     filenum = Column(Integer, primary_key=True)
@@ -196,10 +198,26 @@ class DataBaseInterface(object):
         s.close()
         return obsnums
 
+    def list_observations_with_status(self, status):
+        #
+        # Get all observations with a given status
+        #
+        obsnums = []
+        s = self.Session()
+        try:
+            obsnums = [obs.obsnum for obs in s.query(Observation).filter(Observation.status == status)]
+        except:
+            logger.debug("No new observations found.")
+        s.close()
+        return obsnums
+
     def list_open_observations(self):
         s = self.Session()
         # todo tests
-        obsnums = [obs.obsnum for obs in s.query(Observation).filter(Observation.status != 'NEW', Observation.status != 'COMPLETE')]
+        try:
+            obsnums = [obs.obsnum for obs in s.query(Observation).filter(Observation.status != 'NEW', Observation.status != 'COMPLETE')]
+        except:
+            logger.debug("No open observations found.")
         s.close()
         return obsnums
 
@@ -296,7 +314,7 @@ class DataBaseInterface(object):
         s.close()
         return FAILED_OBSNUMS
 
-    def add_observation(self, obsnum, date, date_type, pol, filename, host, outputhost, length=10 / 60. / 24, status='UV_POT'):  #HARDWF
+    def add_observation(self, obsnum, date, date_type, pol, filename, host, outputhost, length=10 / 60. / 24, status=''):
         """
         create a new observation entry.
         returns: obsnum  (see jdpol2obsnum)
@@ -327,7 +345,7 @@ class DataBaseInterface(object):
         s.close()  # close the session
         return filenum
 
-    def add_observations(self, obslist, status='UV_POT'):  # HARDWF
+    def add_observations(self, obslist, status=''):  # HARDWF
         """
         Add a whole set of observations.
         Handles linking neighboring observations.
@@ -380,8 +398,8 @@ class DataBaseInterface(object):
 
     def delete_obs(self, obsnum):
         #
-        # Delete an obseration and its associated entri in File table
-        #
+        # Delete an obseration and its associated entry in File table
+        # Jon: Does not seem to want to auto delete assocaited file, need to fix
 
         s = self.Session()
 
