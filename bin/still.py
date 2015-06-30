@@ -102,6 +102,20 @@ class StillDataBaseInterface(dbi.DataBaseInterface):
         return obsnum
 
 
+def get_config_entry(config, heading, item, reqd, remove_spaces=True):
+    if config.has_option(heading, item):
+        if remove_spaces:
+            config_item = config.get(heading, item).replace(" ", "")
+        else:
+            config_item = config.get(heading, item)
+    elif reqd:
+        print("The required config file setting %s under %s is missing") % (item, heading)
+        sys.exit(1)
+    else:
+        config_item = ''
+    return config_item
+
+
 def process_client_config_file(sg, wf):
     #
     # We will read the entire cnofig file here and push it into a class
@@ -113,7 +127,7 @@ def process_client_config_file(sg, wf):
         config.read(sg.config_file)
 
         config_sections = config.sections()
-        dbinfo = config['dbinfo']
+        #         dbinfo = config['dbinfo']
         workflow = config['WorkFlow']  # Get workflow actions
         workflow_actions = workflow['actions'].replace(" ", "").split(",")
         wf.workflow_actions = tuple(workflow_actions)  # Get all the workflow actions and put them in a nice immutible tuple

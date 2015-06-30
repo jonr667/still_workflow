@@ -90,7 +90,7 @@ class PopulatedDataBaseInterface(DataBaseInterface):
         jds = n.arange(0, nobs) * self.length + 2456446.1234
         pols = ['xx', 'yy', 'xy', 'yx']
         for i, pol in enumerate(pols):
-            if i >= npols:
+            if i >= npols:  # Jon: ??
                 continue
             for jdi in xrange(len(jds)):
                 obsnum = jdpol2obsnum(jdi, pol, self.length)
