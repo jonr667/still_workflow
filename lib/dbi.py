@@ -156,6 +156,13 @@ class Cal(Base):
     observation = relationship(Observation, backref=backref('cals', uselist=True), cascade="all, delete-orphan", single_parent=True)
 
 
+class Still(Base):
+    __tablename__ = 'still'
+    hostname = Column(String(100), primary_key=True)
+    ip_addr = Column(String(50))
+    last_checkin = Column(DateTime, nullable=False, default=func.current_timestamp())
+
+
 class DataBaseInterface(object):
     def __init__(self, dbhost="", dbport="", dbtype="", dbname="", dbuser="", dbpasswd="", test=False):
         """
@@ -414,8 +421,6 @@ class DataBaseInterface(object):
         for obs in obslist:
             s.delete(obs)
             s.commit()
- #       except:
- #           pass
 
         try:
             OBS = s.query(Observation).filter(Observation.obsnum == obsnum).one()
@@ -556,6 +561,14 @@ class DataBaseInterface(object):
         OBS = self.get_obs(obsnum)
         status = OBS.status
         return status
+
+    def still_checkin(self, hostname, ip_addr):
+        s = self.Session()
+        STILL = Still(hostname=hostname, ip_addr=ip_addr)
+        s.merge(STILL)
+        s.commit()
+        s.close()
+        return 0
 
 # def get_neighbors(self,obsnum):
 #        """

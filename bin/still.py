@@ -141,6 +141,7 @@ def process_client_config_file(sg, wf):
         sg.data_dir = get_config_entry(config, 'Still', 'data_dir', reqd=True, remove_spaces=False)
         sg.timeout = get_config_entry(config, 'Still', 'timeout', reqd=True, remove_spaces=True)
         sg.block_size = get_config_entry(config, 'Still', 'block_size', reqd=True, remove_spaces=True)
+        sg.actions_per_still = int(get_config_entry(config, 'Still', 'actions_per_still', reqd=False, remove_spaces=True, default_val=8))
 
         # Read in all the workflow information
         wf.workflow_actions = tuple(get_config_entry(config, 'WorkFlow', 'actions', reqd=True, remove_spaces=True).split(","))
@@ -190,17 +191,16 @@ def main_client(sg, wf, args):
     #    add_observations.get_all_nags_files_for_obsid(sg, obsid)
     #    sync_new_ops_from_ngas_to_still(sg)  # Lets get started and get a batch of new observations and push them into the db
     #   sys.exit(0)
-    STILLS = sg.hosts
+    # STILLS = sg.hosts
+    # ACTIONS_PER_STILL = sg.actions_per_still  # how many actions that run in parallel on a still
+    # BLOCK_SIZE = sg.block_size  # number of files that are sent together to a still
+    # TIMEOUT = sg.timeout  # seconds; how long a task is allowed to be running before it is assumed to have failed
+    # SLEEPTIME = sg.sleep_time  # seconds; throttle on how often the scheduler polls the database
 
-    ACTIONS_PER_STILL = sg.actions_per_still  # how many actions that run in parallel on a still
-    BLOCK_SIZE = sg.block_size  # number of files that are sent together to a still
-    TIMEOUT = sg.timeout  # seconds; how long a task is allowed to be running before it is assumed to have failed
-    SLEEPTIME = sg.sleep_time  # seconds; throttle on how often the scheduler polls the database
+    task_clients = [TaskClient(sg.dbi, s, wf, port=sg.port) for s in sg.hosts]
+    myscheduler = StillScheduler(task_clients, wf, actions_per_still=sg.actions_per_still, blocksize=sg.block_size, nstills=len(sg.hosts))  # Init scheduler daemon
 
-    task_clients = [TaskClient(sg.dbi, s, wf, port=sg.port) for s in STILLS]
-    myscheduler = StillScheduler(task_clients, wf, actions_per_still=ACTIONS_PER_STILL, blocksize=BLOCK_SIZE, nstills=len(STILLS))  # Init scheduler daemon
-
-    myscheduler.start(dbi=sg.dbi, ActionClass=Action, action_args=(task_clients, TIMEOUT), sleeptime=SLEEPTIME)
+    myscheduler.start(dbi=sg.dbi, ActionClass=Action, action_args=(task_clients, sg.sleep_time), sleeptime=sg.sleep_time)
 
     return 0
 

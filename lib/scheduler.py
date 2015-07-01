@@ -1,11 +1,11 @@
 import time
 import sys
-
+import logging
 #from still_shared import logger
 
-# logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-# logger = logging.getLogger('scheduler')
-# logger.setLevel(logging.DEBUG)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger('scheduler')
+logger.setLevel(logging.DEBUG)
 
 MAXFAIL = 5  # Jon : move this into config
 
@@ -124,6 +124,10 @@ class Scheduler:
     def ext_command_hook(self):
         return
 
+    def register_still_server(self, dbi):
+        print(dbi)
+        return
+
     def start(self, dbi, ActionClass=None, action_args=(), sleeptime=.1):
         '''Begin scheduling (blocking).
         dbi: DataBaseInterface'''
@@ -131,7 +135,8 @@ class Scheduler:
         print(self.wf.action_prereqs)
         self._run = True
         logger.info('Scheduler.start: entering loop')
-
+        self.register_still_server(dbi)
+        print("got here")
         while self._run:
             # tic = time.time()
             self.ext_command_hook()

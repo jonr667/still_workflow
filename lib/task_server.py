@@ -303,6 +303,7 @@ class TaskServer(SocketServer.UDPServer):
         t.start()
         logger.debug('this is scheduler.py')
         logger.debug("using code at: " + __file__)
+        self.dbi.still_checkin("localhost", "127.0.0.1")
         try:
             self.serve_forever()
         finally:
