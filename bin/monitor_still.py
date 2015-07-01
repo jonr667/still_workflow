@@ -6,12 +6,14 @@ import os
 import sys
 import numpy as n
 
-basedir = os.path.dirname(os.path.realpath(__file__)).replace("unit_tests", "")
+basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
 sys.path.append(basedir + 'lib')
 
-from dbi import DataBaseInterface
 from dbi import Observation
-
+from still import get_dbi_from_config
+from still import SpawnerClass
+from still import WorkFlow
+from still import process_client_config_file
 
 # setup my curses stuff following
 # https://docs.python.org/2/howto/curses.html
@@ -23,9 +25,18 @@ stdscr.nodelay(1)
 
 # setup my db connection
 # Jon : set this up correctly, read conf file
-dbi = DataBaseInterface()
+config_file = basedir + 'etc/still.cfg'
 
-stdscr.addstr("DiStiller Status Board. Monitoring : {dbname}".format(dbname=dbi.dbinfo['dbname']))
+sg = SpawnerClass()
+wf = WorkFlow()
+
+sg.config_file = config_file
+process_client_config_file(sg, wf)
+
+dbi = get_dbi_from_config(config_file)
+dbi.test_db()  # Testing the database to make sure we made a connection, its fun..
+
+stdscr.addstr("DiStiller Status Board. Monitoring")
 stdscr.addstr(1, 0, "Press 'q' to exit")
 statheight = 50
 statusscr = curses.newwin(statheight, 400, 5, 0)
@@ -38,27 +49,17 @@ stat = ['\\', '|', '/', '-', '.']
 i = 0
 try:
     while(1):
-        # get the screen dimensions
-        #        resize = curses.is_term_resized(y, x)
-        #        # Action in loop if resize is True:
-        #        if resize is True:
-        #            y, x = screen.getmaxyx()
-        #            stdscr.clear()
-        #            statusscr.clear()
-        #            curses.resizeterm(y, x)
-        #            stdscr.refresh()
-        #            statussrc.refresh()
-        # load the currently executing files
+
         heigh, width = stdscr.getmaxyx()
         curline = 2
         i += 1
-        stdscr.addstr(0, 30, stat[i % len(stat)])
+        stdscr.addstr(0, 50, stat[i % len(stat)])
         s = dbi.Session()
         totalobs = s.query(Observation).count()
         stdscr.addstr(curline, 0, "Number of observations currently in the database: {totalobs}".format(totalobs=totalobs))
         curline += 1
-        OBSs = s.query(Observation).filter(Observation.status != 'UV_POT', Observation.status != 'COMPLETE', Observation.currentpid > 0).all()  # HARDWF
-        POTCOUNT = s.query(Observation).filter(Observation.status == 'UV_POT').count()  # HARDWF
+        OBSs = s.query(Observation).filter(Observation.status != wf.workflow_actions[0], Observation.status != 'COMPLETE', Observation.currentpid > 0).all()  # HARDWF
+        POTCOUNT = s.query(Observation).filter(Observation.status == wf.workflow_actions[0]).count()  # HARDWF
         obsnums = [OBS.obsnum for OBS in OBSs]
         obshosts = [OBS.stillhost for OBS in OBSs]
         s.close()
@@ -86,26 +87,25 @@ try:
                     try:
                         statusscr.addstr(rowcount[j] + 2, j * colwidth,
                                          "{obsnum} {filename} {status}".format(filename=os.path.basename(filename), status=status, obsnum=obsnum))
-                    except Exception, e:
+                    except Exception:
                         curses.nocbreak()
                         stdscr.keypad(0)
                         curses.echo()
                         curses.endwin()
                         print j * colwidth, rowcount[j] + 2, len("{filename} {status}".format(filename=os.path.basename(filename), status=status))
                         print j, rowcount
-                        print e
+                        # print e
                         sys.exit()
                     rowcount[j] += 1
         statusscr.refresh()
         c = stdscr.getch()
         if c == ord('q'):
             break
-        time.sleep(1)
-except Exception, e:
+        time.sleep(2)
+except Exception:
     pass
 # terminate
 curses.nocbreak()
 stdscr.keypad(0)
 curses.echo()
 curses.endwin()
-print e

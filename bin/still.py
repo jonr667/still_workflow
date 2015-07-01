@@ -44,6 +44,7 @@ class SpawnerClass:
     #
     def __init__(self):
         self.data = []
+        self.dbi = ''
         self.dbname = ''
         self.dbpasswd = ''
         self.dbtype = ''
@@ -102,17 +103,17 @@ class StillDataBaseInterface(dbi.DataBaseInterface):
         return obsnum
 
 
-def get_config_entry(config, heading, item, reqd, remove_spaces=True):
+def get_config_entry(config, heading, item, reqd=False, remove_spaces=True, default_val=''):
     if config.has_option(heading, item):
         if remove_spaces:
             config_item = config.get(heading, item).replace(" ", "")
         else:
             config_item = config.get(heading, item)
     elif reqd:
-        print("The required config file setting %s under %s is missing") % (item, heading)
+        print("The required config file setting \'%s\' under [%s] is missing") % (item, heading)
         sys.exit(1)
     else:
-        config_item = ''
+        config_item = default_val
     return config_item
 
 
@@ -121,65 +122,53 @@ def process_client_config_file(sg, wf):
     # We will read the entire cnofig file here and push it into a class
     #
     config = configparser.RawConfigParser()
-    #        config_file = os.path.expanduser(config_file)
     if os.path.exists(sg.config_file):
-        #    logger.info('loading file ' + config_file)
         config.read(sg.config_file)
 
         config_sections = config.sections()
-        #         dbinfo = config['dbinfo']
-        workflow = config['WorkFlow']  # Get workflow actions
-        workflow_actions = workflow['actions'].replace(" ", "").split(",")
-        wf.workflow_actions = tuple(workflow_actions)  # Get all the workflow actions and put them in a nice immutible tuple
-        if config.has_option('WorkFlow', 'actions_endfile'):
-            workflow_actions_endfile = workflow['actions_endfile'].replace(" ", "").split(",")
-            wf.workflow_actions_endfile = tuple(workflow_actions_endfile)
 
-        if config.has_option('dbinfo', 'dbhost'):
-            sg.dbhost = config.get('dbinfo', 'dbhost').replace(" ", "")
-        if config.has_option('dbinfo', 'dbport'):
-            sg.dbport = int(config.get('dbinfo', 'dbport'))
-        if config.has_option('dbinfo', 'dbtype'):
-            sg.dbtype = config.get('dbinfo', 'dbtype').replace(" ", "")
-        if config.has_option('dbinfo', 'dbuser'):
-            sg.dbuser = config.get('dbinfo', 'dbuser').replace(" ", "")
-        if config.has_option('dbinfo', 'dbpasswd'):
-            sg.dbpasswd = config.get('dbinfo', 'dbpasswd').replace(" ", "")
-        if config.has_option('dbinfo', 'dbname'):
-            sg.dbname = config.get('dbinfo', 'dbname').replace(" ", "")
+        # Read in all the database information
+        sg.dbhost = get_config_entry(config, 'dbinfo', 'dbhost', reqd=True, remove_spaces=True)
+        sg.dbport = get_config_entry(config, 'dbinfo', 'dbport', reqd=True, remove_spaces=True)
+        sg.dbtype = get_config_entry(config, 'dbinfo', 'dbtype', reqd=True, remove_spaces=True)
+        sg.dbuser = get_config_entry(config, 'dbinfo', 'dbuser', reqd=True, remove_spaces=True)
+        sg.dbpasswd = get_config_entry(config, 'dbinfo', 'dbpasswd', reqd=True, remove_spaces=True)
+        sg.dbname = get_config_entry(config, 'dbinfo', 'dbname', reqd=True, remove_spaces=True)
 
-        if config.has_option('Still', 'hosts'):
-            sg.hosts = config.get('Still', 'hosts').replace(" ", "").split(",")
-        if config.has_option('Still', 'port'):
-            sg.port = int(config.get('Still', 'port'))
-        if config.has_option('Still', 'data_dir'):
-            sg.data_dir = config.get('Still', 'data_dir')
-        if config.has_option('Still', 'timeout'):
-            sg.timeout = int(config.get('Still', 'timeout'))
-        if config.has_option('Still', 'block_size'):
-            sg.block_size = int(config.get('Still', 'block_size'))
+        # Read in all the STILL information
+        sg.hosts = get_config_entry(config, 'Still', 'hosts', reqd=True, remove_spaces=True)
+        sg.port = get_config_entry(config, 'Still', 'port', reqd=True, remove_spaces=True)
+        sg.data_dir = get_config_entry(config, 'Still', 'data_dir', reqd=True, remove_spaces=False)
+        sg.timeout = get_config_entry(config, 'Still', 'timeout', reqd=True, remove_spaces=True)
+        sg.block_size = get_config_entry(config, 'Still', 'block_size', reqd=True, remove_spaces=True)
 
-        if config.has_option('WorkFlow', 'prioritize_obs'):
-            wf.prioritize_obs = int(config.get('WorkFlow', 'prioritize_obs'))
-        if config.has_option('WorkFlow', 'still_locked_after'):
-            wf.still_locked_after = config.get('WorkFlow', 'still_locked_after')
-        # if config.has_option('WorkFlow', 'start_trigger_status_state'):
-        #     wf.start_trigger_status_state = config.get('WorkFlow', 'start_trigger_status_state')
-        if config.has_option('WorkFlow', 'neighbors'):
-            wf.neighbors = int(config.get('WorkFlow', 'neighbors'))
+        # Read in all the workflow information
+        wf.workflow_actions = tuple(get_config_entry(config, 'WorkFlow', 'actions', reqd=True, remove_spaces=True).split(","))
+        wf.workflow_actions_endfile = tuple(get_config_entry(config, 'WorkFlow', 'actions_endfile', reqd=False, remove_spaces=True).split(","))
+        wf.prioritize_obs = int(get_config_entry(config, 'WorkFlow', 'prioritize_obs', reqd=False, remove_spaces=True, default_val=0))
+        wf.still_locked_after = get_config_entry(config, 'WorkFlow', 'still_locked_after', reqd=False, remove_spaces=True)
+        wf.neighbors = int(get_config_entry(config, 'WorkFlow', 'neighbors', reqd=False, remove_spaces=False, default_val=0))
 
         for action in wf.workflow_actions:  # Collect all the prereqs and arg strings for any action of the workflow and throw them into a dict of keys and lists
             wf.action_args[action] = '[\'%s:%s/%s\' % (pot, path, basename)]'  # Put in a default host:path/filename for each actions arguements that get passed to do_ scripts
             if action in config_sections:
-                if config.has_option(action, "prereqs"):
-                    wf.action_prereqs[action] = config.get(action, "prereqs").replace(" ", "").split(",")
-                if config.has_option(action, "args"):
-                    wf.action_args[action] = config.get(action, "args")
-
+                wf.action_prereqs[action] = get_config_entry(config, action, 'prereqs', reqd=False, remove_spaces=True).split(",")
+                wf.action_args[action] = get_config_entry(config, action, 'args', reqd=False, remove_spaces=True)
     else:
         print("Config file does not appear to exist : %s") % sg.config_file
         sys.exit(1)
     return 0
+
+
+def get_dbi_from_config(config_file):
+    sg = SpawnerClass()
+    wf = WorkFlow()
+    sg.config_file = config_file
+    process_client_config_file(sg, wf)
+
+    # Create database interface with SQL Alchemy
+    sg.dbi = StillDataBaseInterface(sg.dbhost, sg.dbport, sg.dbtype, sg.dbname, sg.dbuser, sg.dbpasswd, test=False)
+    return sg.dbi
 
 
 def main_client(sg, wf, args):
@@ -188,11 +177,11 @@ def main_client(sg, wf, args):
     #
 
     if args.init is True:   # See if we were told to initiate the database
-        sg.db.createdb()
+        sg.dbi.createdb()
         print("Database has been initialized")
         sys.exit(0)
     try:
-        sg.db.test_db()  # Testing the database to make sure we made a connection, its fun..
+        sg.dbi.test_db()  # Testing the database to make sure we made a connection, its fun..
     except:
         print("We could not run a test on the database and are aborting.  Please check the DBI DB config")
         sys.exit(1)
@@ -208,10 +197,10 @@ def main_client(sg, wf, args):
     TIMEOUT = sg.timeout  # seconds; how long a task is allowed to be running before it is assumed to have failed
     SLEEPTIME = sg.sleep_time  # seconds; throttle on how often the scheduler polls the database
 
-    task_clients = [TaskClient(sg.db, s, wf, port=sg.port) for s in STILLS]
+    task_clients = [TaskClient(sg.dbi, s, wf, port=sg.port) for s in STILLS]
     myscheduler = StillScheduler(task_clients, wf, actions_per_still=ACTIONS_PER_STILL, blocksize=BLOCK_SIZE, nstills=len(STILLS))  # Init scheduler daemon
 
-    myscheduler.start(dbi=sg.db, ActionClass=Action, action_args=(task_clients, TIMEOUT), sleeptime=SLEEPTIME)
+    myscheduler.start(dbi=sg.dbi, ActionClass=Action, action_args=(task_clients, TIMEOUT), sleeptime=SLEEPTIME)
 
     return 0
 
@@ -221,7 +210,7 @@ def main_server(sg):
     # Instantiate a still server instance
     #
 
-    task_server = TaskServer(sg.db, data_dir=sg.data_dir, port=14204)
+    task_server = TaskServer(sg.dbi, data_dir=sg.data_dir, port=14204)
     task_server.start()
     return
 
@@ -250,8 +239,8 @@ def main():
     process_client_config_file(sg, workflow_objects)
 
     # Create database interface with SQL Alchemy
-    sg.db = StillDataBaseInterface(sg.dbhost, sg.dbport, sg.dbtype, sg.dbname, sg.dbuser, sg.dbpasswd, test=False)
 
+    sg.dbi = get_dbi_from_config(sg.config_file)
     if args.client is True:
         main_client(sg, workflow_objects, args)
     elif args.server is True:
