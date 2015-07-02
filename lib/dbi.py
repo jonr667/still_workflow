@@ -1,6 +1,6 @@
 import os
 import sys
-import logging
+# import logging
 import hashlib
 
 from subprocess import Popen, PIPE
@@ -13,7 +13,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 # from sqlalchemy.pool import QueuePool
 
-#from still_shared import logger
+# from still_shared import logger
 
 # Based on example here: http://www.pythoncentral.io/overview-sqlalchemys-expression-language-orm-queries/
 Base = declarative_base()

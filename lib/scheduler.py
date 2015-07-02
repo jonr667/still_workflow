@@ -1,7 +1,7 @@
 import time
 import sys
 import logging
-#from still_shared import logger
+# from still_shared import logger
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('scheduler')

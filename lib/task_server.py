@@ -9,6 +9,8 @@ import scheduler
 import sys
 import psutil
 
+# from still_shared import logger
+
 logger = logging.getLogger('taskserver')
 logger.setLevel(logging.DEBUG)
 logger.propagate = True
