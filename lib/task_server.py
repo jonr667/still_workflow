@@ -57,11 +57,8 @@ class Task:
     def run(self):
         if self.process is not None:
             raise RuntimeError('Cannot run a Task that has been run already.')
-        # if self.task == 'UV':  # on first copy of data to still, record in db that obs is assigned here *HARDWF*
-        #    self.dbi.set_obs_still_host(self.obs, self.still)
-        #    self.dbi.set_obs_still_path(self.obs, os.path.abspath(self.cwd))
         self.process = self._run()
-        if self.process == None:
+        if self.process is None:
             self.record_failure()
         else:
             self.record_launch()

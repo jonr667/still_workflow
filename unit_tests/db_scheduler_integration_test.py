@@ -160,7 +160,7 @@ class TestSchedulerDB(unittest.TestCase):
         self.sg.config_file = "still_test_paper.cfg"
         self.wf = WorkFlow()
         process_client_config_file(self.sg, self.wf)
-        self.task_clients = TaskClient(self.dbi, 'localhost', self.wf, port=TEST_PORT)
+        self.task_clients = [TaskClient(self.dbi, 'localhost', self.wf, port=TEST_PORT)]
 
     def test_populated(self):  # do a couple of quick checks on my db population
         obsnums = self.dbi.list_observations()
@@ -201,6 +201,7 @@ class TestSchedulerDB(unittest.TestCase):
 
         def all_done():
             for obsnum in obsnums:
+                print("I'm in the all_done")
                 if self.dbi.get_obs_status(obsnum) != 'COMPLETE':
                     return False
                 return True
@@ -215,7 +216,7 @@ class TestSchedulerDB(unittest.TestCase):
         while not all_done():
             if time.time() - tstart > completion_time:
                 break
-            time.sleep(1)
+            time.sleep(10)
         s.quit()
         for obsnum in obsnums:
             self.assertEqual(self.dbi.get_obs_status(obsnum), 'COMPLETE')

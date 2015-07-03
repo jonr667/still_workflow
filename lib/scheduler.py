@@ -26,7 +26,6 @@ class Action:
         self.launch_time = -1
         self.timeout = timeout
         self.wf = workflow
-
         self.task_client = task_clients[still]
 
     def set_priority(self, p):
@@ -110,7 +109,7 @@ class Scheduler:
         self.wf = workflow  # Jon: Moved the workflow class to instantiated on object creation, should do the same for dbi probably
         self.task_clients = task_clients
         self.timeout = timeout
-        self.sleep = 5
+        self.sleep = 0.5
         # dict of {obsid+status,failcount}
         # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         # fh = logging.StreamHandler()
@@ -126,10 +125,6 @@ class Scheduler:
     def ext_command_hook(self):
         return
 
-    def register_still_server(self, dbi):
-        print(dbi)
-        return
-
     def start(self, dbi, ActionClass=None, action_args=()):
         '''Begin scheduling (blocking).
         dbi: DataBaseInterface'''
@@ -137,8 +132,7 @@ class Scheduler:
         print(self.wf.action_prereqs)
         self._run = True
         logger.info('Scheduler.start: entering loop')
-        self.register_still_server(dbi)
-        print("got here")
+
         while self._run:
             # tic = time.time()
             self.ext_command_hook()
@@ -191,6 +185,7 @@ class Scheduler:
         for still in self.launched_actions:
             updated_actions = []
             for cnt, a in enumerate(self.launched_actions[still]):
+                print("In the loop!")
                 status = dbi.get_obs_status(a.obs)
                 pid = dbi.get_obs_pid(a.obs)
                 try:
@@ -206,7 +201,6 @@ class Scheduler:
                     if status == self.wf.still_locked_after:  # on first copy of data to still, record in db that obs is assigned here
                         dbi.set_obs_still_host(a.obs, a.still)
                         # dbi.set_obs_still_path(a.obs, os.path.abspath(self.cwd))  # Jon: Not sure how to get this over yet *FIXME*
-
                 elif a.timed_out():
                     logger.info('Task %s for obs %s on still %d TIMED OUT.' % (a.task, a.obs, still))
                     self.kill_action(a)
@@ -295,12 +289,10 @@ class Scheduler:
             print("Status : %s") % status
             cur_step_index = self.wf.workflow_actions_endfile.index(status)
             next_step = self.wf.workflow_actions_endfile[cur_step_index + 1]
-            print("NONE in Neighbors, next step : %s") % next_step
         else:  # this is a normal file
             # next_step = FILE_PROCESSING_LINKS[status]
             cur_step_index = self.wf.workflow_actions.index(status)
             next_step = self.wf.workflow_actions[cur_step_index + 1]
-            print("SOMETHING in Neighbors, next step : %s") % next_step
 
         neighbor_status = [dbi.get_obs_status(n) for n in neighbors if n is not None]
         # Jon : just for some info on neighbors, remove later
