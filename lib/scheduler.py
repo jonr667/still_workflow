@@ -70,9 +70,9 @@ class Action:
         logger.debug('Action: launching (%s,%s) on still %d' % (self.task, self.obs, self.still))
         return self._command()
 
-    def _command(self):
-        '''Replace this function in a subclass to execute different tasks.'''
-        return
+#    def _command(self):
+ #       '''Replace this function in a subclass to execute different tasks.'''
+ #       return
 
     def timed_out(self, curtime=None):
         assert(self.launch_time > 0)  # Error out if action was not launched
