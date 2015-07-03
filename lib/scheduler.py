@@ -12,7 +12,7 @@ MAXFAIL = 5  # Jon : move this into config
 
 class Action:
     '''An Action performs a task on an observation, and is scheduled by a Scheduler.'''
-    def __init__(self, obs, task, neighbor_status, still, workflow, timeout=3600.):
+    def __init__(self, obs, task, neighbor_status, still, workflow, timeout=3600., task_clients=[]):
 
         '''f:obs, task:target status,
         neighbor_status:status of adjacent obs (do not enter a status for a non-existent neighbor
@@ -27,7 +27,7 @@ class Action:
         self.timeout = timeout
         self.wf = workflow
 
-        # self.task_client = task_clients[still]  # Do I need this?
+        self.task_client = task_clients[still]
 
     def set_priority(self, p):
         '''Assign a priority to this action.  Highest priorities are scheduled first.'''
@@ -48,7 +48,7 @@ class Action:
             return True
 
         print("has_prerequisites : Task : %s - Index1 : %s - Index2 : %s") % (self.task, self.wf.workflow_actions[index1], self.wf.workflow_actions[index2])
-        # logger.debug('Action.has_prerequisites: checking (%s,%d) neighbor_status=%s' % (self.task, self.obs, self.neighbor_status))
+        # logger.debug('Action.has_prerequisites: checking (%s,%s) neighbor_status=%s' % (self.task, self.obs, self.neighbor_status))
 
         for status_of_neighbor in self.neighbor_status:
             if status_of_neighbor is None:  # indicates that obs hasn't been entered into DB yet
@@ -59,7 +59,7 @@ class Action:
                 return False
             if index2 is not None and index_of_neighbor_status >= index2:
                 return False
-            # logger.debug('Action.has_prerequisites: (%s,%d) prerequisites met' % (self.task, self.obs))
+            # logger.debug('Action.has_prerequisites: (%s,%s) prerequisites met' % (self.task, self.obs))
 
         return True
 
@@ -92,7 +92,7 @@ class Scheduler:
 
     # Jon : This is done via init, we may want to rewrite this part to do it as a __init__
     # to make instantiating the object little nicer
-    def __init__(self, task_clients, workflow, nstills=4, actions_per_still=8, transfers_per_still=2, blocksize=10):
+    def __init__(self, task_clients, workflow, nstills=4, actions_per_still=8, transfers_per_still=2, blocksize=10, timeout=3600):
         '''nstills:           # of stills in system,
            actions_per_still: # of actions that can be scheduled simultaneously per still.'''
         self.nstills = nstills
@@ -109,6 +109,8 @@ class Scheduler:
         self.failcount = {}
         self.wf = workflow  # Jon: Moved the workflow class to instantiated on object creation, should do the same for dbi probably
         self.task_clients = task_clients
+        self.timeout = timeout
+        self.sleep = 5
         # dict of {obsid+status,failcount}
         # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         # fh = logging.StreamHandler()
@@ -128,7 +130,7 @@ class Scheduler:
         print(dbi)
         return
 
-    def start(self, dbi, ActionClass=None, action_args=(), sleeptime=.1):
+    def start(self, dbi, ActionClass=None, action_args=()):
         '''Begin scheduling (blocking).
         dbi: DataBaseInterface'''
 
@@ -162,7 +164,7 @@ class Scheduler:
                         break  # move on to next still
                     self.launch_action(a)
             self.clean_completed_actions(dbi)
-            time.sleep(sleeptime)
+            time.sleep(self.sleep)
 
     def pop_action_queue(self, still, tx=False):
         '''Return highest priority action for the given still.'''
@@ -182,7 +184,7 @@ class Scheduler:
 
     def kill_action(self, a):
         '''Subclass this to actually kill the process.'''
-        logger.info('Scheduler.kill_action: called on (%s,%d)' % (a.task, a.obs))
+        logger.info('Scheduler.kill_action: called on (%s,%s)' % (a.task, a.obs))
 
     def clean_completed_actions(self, dbi):
         '''Check launched actions for completion, timeout or fail'''
@@ -290,6 +292,7 @@ class Scheduler:
 
         if None in neighbors:  # is this an end-file that can't be processed past UVCR?
             # next_step = ENDFILE_PROCESSING_LINKS[status]
+            print("Status : %s") % status
             cur_step_index = self.wf.workflow_actions_endfile.index(status)
             next_step = self.wf.workflow_actions_endfile[cur_step_index + 1]
             print("NONE in Neighbors, next step : %s") % next_step
@@ -309,7 +312,8 @@ class Scheduler:
         if ActionClass is None:
             ActionClass = Action
 
-        a = ActionClass(obs, next_step, neighbor_status, still, self.wf, *action_args)
+        a = ActionClass(obs, next_step, neighbor_status, still, self.wf, timeout=self.timeout, task_clients=self.task_clients)
+#            def __init__(self, obs, task, neighbor_status, still, workflow, timeout=3600.):
         if self.wf.neighbors == 1:
             if a.has_prerequisites():
                 return a

@@ -2,10 +2,11 @@ import os
 import sys
 # import logging
 import hashlib
+import datetime
 
 from subprocess import Popen, PIPE
 
-from sqlalchemy import Table, Column, String, Integer, ForeignKey
+from sqlalchemy import Table, Column, String, Integer, ForeignKey, TIMESTAMP
 from sqlalchemy import Float, func, DateTime, Enum, BigInteger, Numeric, Text
 from sqlalchemy.orm import relationship, backref, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
@@ -160,7 +161,7 @@ class Still(Base):
     __tablename__ = 'still'
     hostname = Column(String(100), primary_key=True)
     ip_addr = Column(String(50))
-    last_checkin = Column(DateTime, nullable=False, default=func.current_timestamp())
+    last_checkin = Column(DateTime, server_default=func.now(), onupdate=func.current_timestamp())
 
 
 class DataBaseInterface(object):
@@ -238,7 +239,8 @@ class DataBaseInterface(object):
         todo:test
         """
         s = self.Session()
-        OBS = s.query(Observation).filter(Observation.obsnum == obsnum).one()
+        print("My obsnum! %s") % obsnum
+        OBS = s.query(Observation).filter(Observation.obsnum == str(obsnum)).one()
         s.close()
         return OBS
 
@@ -564,8 +566,15 @@ class DataBaseInterface(object):
 
     def still_checkin(self, hostname, ip_addr):
         s = self.Session()
-        STILL = Still(hostname=hostname, ip_addr=ip_addr)
-        s.merge(STILL)
+        print("Got run in thread!")
+        if s.query(Still).filter(Still.hostname == hostname).count() > 0:
+            still = s.query(Still).filter(Still.hostname == hostname).one()
+            still.last_checkin = datetime.datetime.now()
+            s.add(still)
+        else:
+            still = Still(hostname=hostname, ip_addr=ip_addr)
+            s.add(still)
+
         s.commit()
         s.close()
         return 0

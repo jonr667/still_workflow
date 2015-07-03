@@ -6,6 +6,7 @@ import socket
 import os
 import tempfile
 import scheduler
+import string
 import sys
 import psutil
 
@@ -60,10 +61,14 @@ class Task:
         #    self.dbi.set_obs_still_host(self.obs, self.still)
         #    self.dbi.set_obs_still_path(self.obs, os.path.abspath(self.cwd))
         self.process = self._run()
-        self.record_launch()
+        if self.process == None:
+            self.record_failure()
+        else:
+            self.record_launch()
 
     def _run(self):
-        logger.info('Task._run: (%s, %d) %s cwd=%s' % (self.task, self.obs, ' '.join(['do_%s.sh' % self.task] + self.args), self.cwd))
+        process = None
+        logger.info('Task._run: (%s, %s) %s cwd=%s' % (self.task, self.obs, ' '.join(['do_%s.sh' % self.task] + self.args), self.cwd))
         # process= subprocess.Popen(['do_%s.sh' % self.task] + self.args, cwd=self.cwd,stderr=subprocess.PIPE,stdout=subprocess.PIPE) # XXX d something with stdout stderr
         # create a temp file descriptor for stdout and stderr
         self.OUTFILE = tempfile.TemporaryFile()
@@ -73,21 +78,23 @@ class Task:
             process.cpu_affinity(range(psutil.cpu_count()))
             self.dbi.add_log(self.obs, self.task, ' '.join(['do_%s.sh' % self.task] + self.args + ['\n']), None)
         except Exception, e:
-            logger.error('Task._run: (%s,%d) %s error="%s"' % (self.task, self.obs, ' '.join(['do_%s.sh' % self.task] + self.args), e))
+            logger.error('Task._run: (%s,%s) %s error="%s"' % (self.task, self.obs, ' '.join(['do_%s.sh' % self.task] + self.args), e))
+#            sys.exit(1)
         return process
 
     def poll(self):
-        # logger.debug('Task.pol: (%s,%d)  reading to log position %d'%(self.task,self.obs,self.outfile_counter))
-        if self.process is None: return None
+        # logger.debug('Task.pol: (%s,%s)  reading to log position %d'%(self.task,self.obs,self.outfile_counter))
+        if self.process is None:
+            return None
         self.OUTFILE.seek(self.outfile_counter)
         logtext = self.OUTFILE.read()
-        # logger.debug('Task.pol: (%s,%d) found %d log characters' % (self.task,self.obs,len(logtext)))
+        # logger.debug('Task.pol: (%s,%s) found %d log characters' % (self.task,self.obs,len(logtext)))
         if len(logtext) > self.outfile_counter:
             logger.debug('Task.pol: ({task},{obsnum}) adding {d} log characeters'.format(task=self.task, obsnum=self.obs, d=len(logtext)))
             self.dbi.update_log(self.obs, self.task, logtext=logtext, exit_status=self.process.poll())
             self.outfile_counter += len(logtext)
-            # logger.debug('Task.pol: (%s,%d) setting next log position to %d' % (self.task,self.obs,self.outfile_counter))
-        # logger.debug('Task.pol: (%s,%d) post log addition' % (self.task,self.obs))
+            # logger.debug('Task.pol: (%s,%s) setting next log position to %d' % (self.task,self.obs,self.outfile_counter))
+        # logger.debug('Task.pol: (%s,%s) post log addition' % (self.task,self.obs))
         return self.process.poll()
 
     def finalize(self):
@@ -140,15 +147,27 @@ class TaskClient:
     def __init__(self, dbi, host, workflow, port=STILL_PORT):
         self.dbi = dbi
         self.host_port = (host, port)
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.wf = workflow
 
     def _tx(self, task, obs, args):
         print("my args : %s") % args
-        logger.debug('TaskClient._tx: sending (%s,%d) with args=%s' % (task, obs, ' '.join(args)))
-        print("Host and Port in _tx: %s") % self.host_port[0]
+        logger.debug('TaskClient._tx: sending (%s,%s) with args=%s' % (task, obs, ' '.join(args)))
+
         pkt = to_pkt(task, obs, self.host_port[0], args)
-        self.sock.sendto(pkt, self.host_port)
+        print(self.host_port)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        try:
+            print("connecting to TaskServer %s") % self.host_port[0]
+            self.sock.connect(self.host_port)
+            self.sock.sendall(pkt + "\n")
+            recieved = self.sock.recv(1024)
+            if recieved != "OK\n":
+                print("!! We had a problem sending data to %s") % self.host_port[0]
+                # Jon: Put more stuff here to handle when the server doesn't respond back correctly that its taken the task
+        finally:
+            self.sock.close()
 
     def gen_args(self, task, obs):
         pot, path, basename = self.dbi.get_input_file(obs)  # Jon: Pot I believe is host where file to process is, basename is just the file name
@@ -191,7 +210,7 @@ class TaskClient:
     def tx_kill(self, obs):
         pid = self.dbi.get_obs_pid(obs)
         if pid is None:
-            logger.debug('ActionClient.tx_kill: task running on %d is not alive' % obs)
+            logger.debug('ActionClient.tx_kill: task running on %s is not alive' % obs)
         else:
             self._tx('KILL', obs, [str(pid)])
 
@@ -204,7 +223,7 @@ class Action(scheduler.Action):
         # self.task_client = task_clients[still]
 
     def _command(self):
-        logger.debug('Action: task_client(%s,%d)' % (self.task, self.obs))
+        logger.debug('Action: task_client(%s,%s)' % (self.task, self.obs))
         self.task_client.tx(self.task, self.obs)
 
 # Jon : I don't think we need to handle this in this way, I added the self.task_clients to the normal class.
@@ -221,23 +240,24 @@ class Action(scheduler.Action):
 #         self.task_clients[still].tx_kill(a.obs)
 
 
-class TaskHandler(SocketServer.BaseRequestHandler):
-    def setup(self):
-        # logger.debug('Connect: %s\n' % str(self.client_address))
-        return
-
-    def finish(self):
-        # logger.debug('Disconnect: %s\n' % str(self.client_address))
-        return
+# class TaskHandler(SocketServer.BaseRequestHandler):
+class TaskHandler(SocketServer.StreamRequestHandler):
 
     def get_pkt(self):
-        pkt = self.request[0]
+        pkt = self.data
         task, obs, still, args = from_pkt(pkt)
         return task, obs, still, args
 
     def handle(self):
+
+        self.data = self.rfile.readline().strip()
+        self.wfile.write("OK\n")
+
+        print "{} wrote:".format(self.client_address[0])
+        print self.data
+        print("I got stuffs!")
         task, obs, still, args = self.get_pkt()
-        logger.info('TaskHandler.handle: received (%s,%d) with args=%s' % (task, obs, ' '.join(args)))
+        logger.info('TaskHandler.handle: received (%s,%s) with args=%s' % (task, obs, ' '.join(args)))
         if task == 'KILL':
             self.server.kill(int(args[0]))  # TODO I THINK THIS IS WHERE WE HAVE A PROBLEM. RUN and maybe COMPLETE need to clean up existing threads.
         elif task == 'COMPLETE':  # HARDWF, JON: This one should be ok but complete still needs to be in conf file.  Though Maybe just make last thing in conf file what we use here?
@@ -248,11 +268,11 @@ class TaskHandler(SocketServer.BaseRequestHandler):
             t.run()
 
 
-class TaskServer(SocketServer.UDPServer):
+class TaskServer(SocketServer.TCPServer):
     allow_reuse_address = True
 
     def __init__(self, dbi, data_dir='.', port=STILL_PORT, handler=TaskHandler):
-        SocketServer.UDPServer.__init__(self, ('', port), handler)
+        SocketServer.TCPServer.__init__(self, ('', port), handler)
         self.active_tasks_semaphore = threading.Semaphore()
         self.active_tasks = []
         self.dbi = dbi
@@ -260,6 +280,7 @@ class TaskServer(SocketServer.UDPServer):
         self.is_running = False
         self.watchdog_count = 0
         self.port = port
+#        self.rfile = self.rfile
 
     def append_task(self, t):
         self.active_tasks_semaphore.acquire()
@@ -286,6 +307,8 @@ class TaskServer(SocketServer.UDPServer):
                     t.finalize()
             self.active_tasks = new_active_tasks
             self.active_tasks_semaphore.release()
+
+            #  Jon: I think we can get rid of the watchdog as I'm already throwing this at the db
             time.sleep(poll_interval)
             if self.watchdog_count == 100:
                 logger.debug('TaskServer is alive')
@@ -299,6 +322,17 @@ class TaskServer(SocketServer.UDPServer):
                 task.kill()
                 break
 
+    def checkin_timer(self):
+        #
+        # Just a timer that will update that its last_checkin time in the database every 5min
+        #
+        while True:
+            hostname = socket.gethostname()
+            ip_addr = socket.gethostbyname(hostname)
+            self.dbi.still_checkin(hostname, ip_addr)
+            time.sleep(30)
+        return 0
+
     def start(self):
         self.is_running = True
         t = threading.Thread(target=self.finalize_tasks)
@@ -307,16 +341,22 @@ class TaskServer(SocketServer.UDPServer):
         logger.debug("using code at: " + __file__)
         self.dbi.still_checkin("localhost", "127.0.0.1")
         try:
+            # Setup a thread that just updates the last checkin time for this still every 5min
+            timer_thread = threading.Thread(target=self.checkin_timer)
+            timer_thread.daemon = True  # Make it a daemon so that when ctrl-c happens this thread goes away
+            timer_thread.start()
+            # Start the lisetenser server
             self.serve_forever()
         finally:
             self.shutdown()
             t.join()
 
     def shutdown(self):
+        print("getting to shutdown!!")
         self.is_running = False
         for t in self.active_tasks:
             try:
                 t.process.kill()
             except(OSError):
                 pass
-        SocketServer.UDPServer.shutdown(self)
+        SocketServer.TCPServer.shutdown(self)

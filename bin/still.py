@@ -136,11 +136,11 @@ def process_client_config_file(sg, wf):
         sg.dbname = get_config_entry(config, 'dbinfo', 'dbname', reqd=True, remove_spaces=True)
 
         # Read in all the STILL information
-        sg.hosts = get_config_entry(config, 'Still', 'hosts', reqd=True, remove_spaces=True)
-        sg.port = get_config_entry(config, 'Still', 'port', reqd=True, remove_spaces=True)
+        sg.hosts = get_config_entry(config, 'Still', 'hosts', reqd=True, remove_spaces=True).split(",")
+        sg.port = int(get_config_entry(config, 'Still', 'port', reqd=True, remove_spaces=True))
         sg.data_dir = get_config_entry(config, 'Still', 'data_dir', reqd=True, remove_spaces=False)
-        sg.timeout = get_config_entry(config, 'Still', 'timeout', reqd=True, remove_spaces=True)
-        sg.block_size = get_config_entry(config, 'Still', 'block_size', reqd=True, remove_spaces=True)
+        sg.timeout = int(get_config_entry(config, 'Still', 'timeout', reqd=False, remove_spaces=True))
+        sg.block_size = int(get_config_entry(config, 'Still', 'block_size', reqd=False, remove_spaces=True))
         sg.actions_per_still = int(get_config_entry(config, 'Still', 'actions_per_still', reqd=False, remove_spaces=True, default_val=8))
 
         # Read in all the workflow information
@@ -172,7 +172,7 @@ def get_dbi_from_config(config_file):
     return sg.dbi
 
 
-def main_client(sg, wf, args):
+def start_client(sg, wf, args):
     #
     # Instantiate a still client instance
     #
@@ -198,14 +198,14 @@ def main_client(sg, wf, args):
     # SLEEPTIME = sg.sleep_time  # seconds; throttle on how often the scheduler polls the database
 
     task_clients = [TaskClient(sg.dbi, s, wf, port=sg.port) for s in sg.hosts]
-    myscheduler = StillScheduler(task_clients, wf, actions_per_still=sg.actions_per_still, blocksize=sg.block_size, nstills=len(sg.hosts))  # Init scheduler daemon
+    myscheduler = StillScheduler(task_clients, wf, actions_per_still=sg.actions_per_still, blocksize=sg.block_size, nstills=len(sg.hosts), timeout=sg.sleep_time)  # Init scheduler daemon
 
-    myscheduler.start(dbi=sg.dbi, ActionClass=Action, action_args=(task_clients, sg.sleep_time), sleeptime=sg.sleep_time)
+    myscheduler.start(dbi=sg.dbi, ActionClass=Action)
 
     return 0
 
 
-def main_server(sg):
+def start_server(sg):
     #
     # Instantiate a still server instance
     #
@@ -242,9 +242,9 @@ def main():
 
     sg.dbi = get_dbi_from_config(sg.config_file)
     if args.client is True:
-        main_client(sg, workflow_objects, args)
+        start_client(sg, workflow_objects, args)
     elif args.server is True:
-        main_server(sg)
+        start_server(sg)
     else:
         print("You must specify to start this as a client or server (--client or --server)")
 
