@@ -144,27 +144,39 @@ class TaskClient:
     def __init__(self, dbi, host, workflow, port=STILL_PORT):
         self.dbi = dbi
         self.host_port = (host, port)
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.wf = workflow
+        self.error_count = 0
 
     def _tx(self, task, obs, args):
+        recieved = ''
+        status = ''
         print("my args : %s") % args
         logger.debug('TaskClient._tx: sending (%s,%s) with args=%s' % (task, obs, ' '.join(args)))
 
         pkt = to_pkt(task, obs, self.host_port[0], args)
         print(self.host_port)
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
         try:
             print("connecting to TaskServer %s") % self.host_port[0]
-            self.sock.connect(self.host_port)
-            self.sock.sendall(pkt + "\n")
-            recieved = self.sock.recv(1024)
-            if recieved != "OK\n":
-                print("!! We had a problem sending data to %s") % self.host_port[0]
-                # Jon: Put more stuff here to handle when the server doesn't respond back correctly that its taken the task
+            try:
+                sock.connect(self.host_port)
+                sock.sendall(pkt + "\n")
+                recieved = sock.recv(1024)
+            except socket.error, exc:
+                print "Caught exception socket.error : %s" % exc
         finally:
-            self.sock.close()
+            sock.close()
+
+        if recieved != "OK\n":
+            # Jon: Put more stuff here to handle when the server doesn't respond back correctly that its taken the task
+            print("!! We had a problem sending data to %s") % self.host_port[0]
+            self.error_count += 1
+            print("Host : %s  has error count :%s") % (self.host_port[0], self.error_count)
+            status = "FAILED_TO_CONNECT"
+        else:
+            status = "OK"
+        return status, self.error_count
 
     def gen_args(self, task, obs):
         pot, path, basename = self.dbi.get_input_file(obs)  # Jon: Pot I believe is host where file to process is, basename is just the file name

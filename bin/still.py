@@ -184,18 +184,13 @@ def start_client(sg, wf, args):
     try:
         sg.dbi.test_db()  # Testing the database to make sure we made a connection, its fun..
     except:
-        print("We could not run a test on the database and are aborting.  Please check the DBI DB config")
+        print("We could not run a test on the database and are aborting.  Please check the DB config settings")
         sys.exit(1)
     # add_observations.ingest_addtional_opsids(sg)
     #    obsid = 1062453568
     #    add_observations.get_all_nags_files_for_obsid(sg, obsid)
     #    sync_new_ops_from_ngas_to_still(sg)  # Lets get started and get a batch of new observations and push them into the db
     #   sys.exit(0)
-    # STILLS = sg.hosts
-    # ACTIONS_PER_STILL = sg.actions_per_still  # how many actions that run in parallel on a still
-    # BLOCK_SIZE = sg.block_size  # number of files that are sent together to a still
-    # TIMEOUT = sg.timeout  # seconds; how long a task is allowed to be running before it is assumed to have failed
-    # SLEEPTIME = sg.sleep_time  # seconds; throttle on how often the scheduler polls the database
 
     task_clients = [TaskClient(sg.dbi, s, wf, port=sg.port) for s in sg.hosts]
     myscheduler = StillScheduler(task_clients, wf, actions_per_still=sg.actions_per_still, blocksize=sg.block_size, nstills=len(sg.hosts), timeout=sg.sleep_time)  # Init scheduler daemon

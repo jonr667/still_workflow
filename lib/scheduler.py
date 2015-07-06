@@ -134,6 +134,7 @@ class Scheduler:
         logger.info('Scheduler.start: entering loop')
 
         while self._run:
+            print("IM HERE!")
             # tic = time.time()
             self.ext_command_hook()
             logger.info("getting active obs")
@@ -147,14 +148,14 @@ class Scheduler:
                     try:
                         a = self.pop_action_queue(still, tx=False)
                     except(IndexError):  # no actions can be taken on this still
-                        # logger.info('No actions available for still-%d\n' % still)
+                        logger.info('No actions available for still-%d\n' % still)
                         break  # move on to next still
                     self.launch_action(a)
                 while len(self.get_launched_actions(still, tx=True)) < self.transfers_per_still:
                     try:
                         a = self.pop_action_queue(still, tx=True)
                     except(IndexError):  # no actions can be taken on this still
-                        # logger.info('No actions available for still-%d\n' % still)
+                        logger.info('No actions available for still-%d\n' % still)
                         break  # move on to next still
                     self.launch_action(a)
             self.clean_completed_actions(dbi)
