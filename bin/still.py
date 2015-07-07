@@ -18,7 +18,7 @@ import dbi
 from scheduler import Scheduler
 from task_server import TaskServer
 from task_server import TaskClient
-from task_server import Action
+from scheduler import Action
 
 
 class WorkFlow:
@@ -28,6 +28,7 @@ class WorkFlow:
     #
 
     def __init__(self):
+        self.name = ''
         self.workflow_actions = ''
         self.action_prereqs = {}
         self.action_args = {}
@@ -148,6 +149,7 @@ def process_client_config_file(sg, wf):
         wf.workflow_actions_endfile = tuple(get_config_entry(config, 'WorkFlow', 'actions_endfile', reqd=False, remove_spaces=True).split(","))
         wf.prioritize_obs = int(get_config_entry(config, 'WorkFlow', 'prioritize_obs', reqd=False, remove_spaces=True, default_val=0))
         wf.still_locked_after = get_config_entry(config, 'WorkFlow', 'still_locked_after', reqd=False, remove_spaces=True)
+        wf.name = get_config_entry(config, 'WorkFlow', 'name', reqd=True, remove_spaces=True)
         wf.neighbors = int(get_config_entry(config, 'WorkFlow', 'neighbors', reqd=False, remove_spaces=False, default_val=0))
 
         for action in wf.workflow_actions:  # Collect all the prereqs and arg strings for any action of the workflow and throw them into a dict of keys and lists
@@ -186,26 +188,21 @@ def start_client(sg, wf, args):
     except:
         print("We could not run a test on the database and are aborting.  Please check the DB config settings")
         sys.exit(1)
-    # add_observations.ingest_addtional_opsids(sg)
-    #    obsid = 1062453568
-    #    add_observations.get_all_nags_files_for_obsid(sg, obsid)
-    #    sync_new_ops_from_ngas_to_still(sg)  # Lets get started and get a batch of new observations and push them into the db
-    #   sys.exit(0)
 
     task_clients = [TaskClient(sg.dbi, s, wf, port=sg.port) for s in sg.hosts]
-    myscheduler = StillScheduler(task_clients, wf, actions_per_still=sg.actions_per_still, blocksize=sg.block_size, nstills=len(sg.hosts), timeout=sg.sleep_time)  # Init scheduler daemon
+    myscheduler = StillScheduler(task_clients, wf, dbi=sg.dbi, actions_per_still=sg.actions_per_still, blocksize=sg.block_size, nstills=len(sg.hosts), timeout=sg.sleep_time)  # Init scheduler daemon
 
     myscheduler.start(dbi=sg.dbi, ActionClass=Action)
 
     return 0
 
 
-def start_server(sg):
+def start_server(sg, wf):
     #
     # Instantiate a still server instance
     #
 
-    task_server = TaskServer(sg.dbi, data_dir=sg.data_dir, port=14204)
+    task_server = TaskServer(sg.dbi, workflow_name=wf.name, data_dir=sg.data_dir, port=sg.port)
     task_server.start()
     return
 
@@ -239,7 +236,7 @@ def main():
     if args.client is True:
         start_client(sg, workflow_objects, args)
     elif args.server is True:
-        start_server(sg)
+        start_server(sg, workflow_objects)
     else:
         print("You must specify to start this as a client or server (--client or --server)")
 

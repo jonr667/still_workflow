@@ -5,8 +5,8 @@ import time
 import socket
 import os
 import tempfile
-import scheduler
-import string
+# import scheduler
+# import string
 import sys
 import psutil
 
@@ -66,7 +66,6 @@ class Task:
     def _run(self):
         process = None
         logger.info('Task._run: (%s, %s) %s cwd=%s' % (self.task, self.obs, ' '.join(['do_%s.sh' % self.task] + self.args), self.cwd))
-        # process= subprocess.Popen(['do_%s.sh' % self.task] + self.args, cwd=self.cwd,stderr=subprocess.PIPE,stdout=subprocess.PIPE) # XXX d something with stdout stderr
         # create a temp file descriptor for stdout and stderr
         self.OUTFILE = tempfile.TemporaryFile()
         self.outfile_counter = 0
@@ -147,29 +146,29 @@ class TaskClient:
         self.wf = workflow
         self.error_count = 0
 
-    def _tx(self, task, obs, args):
+    def transmit(self, task, obs):
         recieved = ''
         status = ''
+        args = self.gen_args(task, obs)
         print("my args : %s") % args
-        logger.debug('TaskClient._tx: sending (%s,%s) with args=%s' % (task, obs, ' '.join(args)))
+        logger.debug('TaskClient.transmit: sending (%s,%s) with args=%s' % (task, obs, ' '.join(args)))
 
         pkt = to_pkt(task, obs, self.host_port[0], args)
         print(self.host_port)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(5)
-        try:
+        try:  # Attempt to open a socket to a server and send over task instructions
             print("connecting to TaskServer %s") % self.host_port[0]
             try:
                 sock.connect(self.host_port)
                 sock.sendall(pkt + "\n")
                 recieved = sock.recv(1024)
             except socket.error, exc:
-                print "Caught exception socket.error : %s" % exc
+                logger.info("Caught exection trying to contact : %s socket.error : %s" % (self.host_port[0], exc))
         finally:
             sock.close()
 
-        if recieved != "OK\n":
-            # Jon: Put more stuff here to handle when the server doesn't respond back correctly that its taken the task
+        if recieved != "OK\n":  # Check if we did not recieve an OK that the server accepted the task
             print("!! We had a problem sending data to %s") % self.host_port[0]
             self.error_count += 1
             print("Host : %s  has error count :%s") % (self.host_port[0], self.error_count)
@@ -211,45 +210,14 @@ class TaskClient:
 
         return args
 
-    def tx(self, task, obs):
-        args = self.gen_args(task, obs)
-        print("Got here, that's exciting... Args: %s, task: %s") % (args, task)
-        self._tx(task, obs, args)
-
     def tx_kill(self, obs):
         pid = self.dbi.get_obs_pid(obs)
         if pid is None:
             logger.debug('ActionClient.tx_kill: task running on %s is not alive' % obs)
         else:
-            self._tx('KILL', obs, [str(pid)])
-
-# XXX consider moving this class to a separate file
+            self.transmit('KILL', obs)
 
 
-class Action(scheduler.Action):
-    # def __init__(self, obs, task, neighbor_status, still, task_clients, timeout=3600.):
-        # scheduler.Action.__init__(self, obs, task, neighbor_status, still, timeout=timeout)
-        # self.task_client = task_clients[still]
-
-    def _command(self):
-        logger.debug('Action: task_client(%s,%s)' % (self.task, self.obs))
-        self.task_client.tx(self.task, self.obs)
-
-# Jon : I don't think we need to handle this in this way, I added the self.task_clients to the normal class.
-#       If this is needed it might be wroth just renaming it something other than Scheduler or something that
-#       imports this file and scheduler.py can get conflicts.
-# class Scheduler(scheduler.Scheduler):
-#     def __init__(self, task_clients, workflow, actions_per_still=8, blocksize=10):
-#         scheduler.Scheduler.__init__(self, nstills=len(task_clients), actions_per_still=actions_per_still, blocksize=blocksize)
-#         self.task_clients = task_clients
-# Jon : Bring back kill action
-#     def kill_action(self, a):
-#         scheduler.Scheduler.kill_action(self, a)
-#         still = self.obs_to_still(a.obs)
-#         self.task_clients[still].tx_kill(a.obs)
-
-
-# class TaskHandler(SocketServer.BaseRequestHandler):
 class TaskHandler(SocketServer.StreamRequestHandler):
 
     def get_pkt(self):
@@ -280,7 +248,7 @@ class TaskHandler(SocketServer.StreamRequestHandler):
 class TaskServer(SocketServer.TCPServer):
     allow_reuse_address = True
 
-    def __init__(self, dbi, data_dir='.', port=STILL_PORT, handler=TaskHandler):
+    def __init__(self, dbi, data_dir='.', port=STILL_PORT, handler=TaskHandler, workflow_name=''):
         SocketServer.TCPServer.__init__(self, ('', port), handler)
         self.active_tasks_semaphore = threading.Semaphore()
         self.active_tasks = []
@@ -289,6 +257,7 @@ class TaskServer(SocketServer.TCPServer):
         self.is_running = False
         self.watchdog_count = 0
         self.port = port
+        self.workflow_name = workflow_name
 #        self.rfile = self.rfile
 
     def append_task(self, t):
@@ -338,8 +307,8 @@ class TaskServer(SocketServer.TCPServer):
         while True:
             hostname = socket.gethostname()
             ip_addr = socket.gethostbyname(hostname)
-            self.dbi.still_checkin(hostname, ip_addr)
-            time.sleep(30)
+            self.dbi.still_checkin(hostname, ip_addr, self.workflow_name, self.port)
+            time.sleep(180)
         return 0
 
     def start(self):
@@ -348,7 +317,7 @@ class TaskServer(SocketServer.TCPServer):
         t.start()
         logger.debug('this is scheduler.py')
         logger.debug("using code at: " + __file__)
-        self.dbi.still_checkin("localhost", "127.0.0.1")
+        # self.dbi.still_checkin("localhost", "127.0.0.1")
         try:
             # Setup a thread that just updates the last checkin time for this still every 5min
             timer_thread = threading.Thread(target=self.checkin_timer)

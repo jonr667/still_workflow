@@ -1,13 +1,27 @@
 import time
 import sys
 import logging
+import os
+from task_server import TaskClient
+# import datetime
 # from still_shared import logger
+
+#  Setup the lib path ./lib/  as a spot to check for python libraries
+#basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
+#sys.path.append(basedir + 'bin')
+
+#from still.SpawnerClass import find_all_stills
+
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('scheduler')
 logger.setLevel(logging.DEBUG)
 
 MAXFAIL = 5  # Jon : move this into config
+
+
+def action_cmp(x, y):
+    return cmp(x.priority, y.priority)
 
 
 class Action:
@@ -68,11 +82,7 @@ class Action:
             launch_time = time.time()
         self.launch_time = launch_time
         logger.debug('Action: launching (%s,%s) on still %d' % (self.task, self.obs, self.still))
-        return self._command()
-
-#    def _command(self):
- #       '''Replace this function in a subclass to execute different tasks.'''
- #       return
+        return self.run_remote_task()
 
     def timed_out(self, curtime=None):
         assert(self.launch_time > 0)  # Error out if action was not launched
@@ -80,9 +90,9 @@ class Action:
             curtime = time.time()
         return curtime > self.launch_time + self.timeout
 
-
-def action_cmp(x, y):
-    return cmp(x.priority, y.priority)
+    def run_remote_task(self):
+        logger.debug('Action: task_client(%s,%s)' % (self.task, self.obs))
+        self.task_client.transmit(self.task, self.obs)
 
 
 class Scheduler:
@@ -91,7 +101,7 @@ class Scheduler:
 
     # Jon : This is done via init, we may want to rewrite this part to do it as a __init__
     # to make instantiating the object little nicer
-    def __init__(self, task_clients, workflow, nstills=4, actions_per_still=8, transfers_per_still=2, blocksize=10, timeout=3600):
+    def __init__(self, task_clients, workflow, dbi='', nstills=4, actions_per_still=8, transfers_per_still=2, blocksize=10, timeout=3600):
         '''nstills:           # of stills in system,
            actions_per_still: # of actions that can be scheduled simultaneously per still.'''
         self.nstills = nstills
@@ -101,13 +111,20 @@ class Scheduler:
         self.active_obs = []
         self._active_obs_dict = {}
         self.action_queue = []
+        self.dbi = dbi
         self.launched_actions = {}
         for still in xrange(nstills):
             self.launched_actions[still] = []
         self._run = False
         self.failcount = {}
         self.wf = workflow  # Jon: Moved the workflow class to instantiated on object creation, should do the same for dbi probably
-        self.task_clients = task_clients
+        # If task_clients is set to AUTO then check the db for still servers
+
+        if task_clients[0].host_port[0] == "AUTO":
+            self.task_clients = self.find_all_stills()
+        else:
+            self.task_clients = task_clients
+
         self.timeout = timeout
         self.sleep = 0.5
         # dict of {obsid+status,failcount}
@@ -118,6 +135,16 @@ class Scheduler:
         # logger.addHandler(fh)
         # logger.setLevel(logging.DEBUG)
         # logger.info('setting up stream')
+
+    def find_all_stills(self):
+        stills = self.dbi.get_available_stills(self.wf.name)
+        print("looking for stills...")
+        #    def __init__(self, dbi, host, workflow, port=STILL_PORT):
+
+        for still in stills:
+            print("Found still : %s") % still.hostname
+        task_clients = [TaskClient(self.dbi, s.hostname, self.wf, port=still.port) for s in stills]
+        return task_clients
 
     def quit(self):
         self._run = False
@@ -132,9 +159,9 @@ class Scheduler:
         print(self.wf.action_prereqs)
         self._run = True
         logger.info('Scheduler.start: entering loop')
-
+        self.dbi = dbi
         while self._run:
-            print("IM HERE!")
+
             # tic = time.time()
             self.ext_command_hook()
             logger.info("getting active obs")
@@ -158,7 +185,7 @@ class Scheduler:
                         logger.info('No actions available for still-%d\n' % still)
                         break  # move on to next still
                     self.launch_action(a)
-            self.clean_completed_actions(dbi)
+            self.clean_completed_actions(self.dbi)
             time.sleep(self.sleep)
 
     def pop_action_queue(self, still, tx=False):
@@ -186,7 +213,6 @@ class Scheduler:
         for still in self.launched_actions:
             updated_actions = []
             for cnt, a in enumerate(self.launched_actions[still]):
-                print("In the loop!")
                 status = dbi.get_obs_status(a.obs)
                 pid = dbi.get_obs_pid(a.obs)
                 try:

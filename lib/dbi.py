@@ -161,6 +161,8 @@ class Still(Base):
     __tablename__ = 'still'
     hostname = Column(String(100), primary_key=True)
     ip_addr = Column(String(50))
+    port = Column(BigInteger)
+    workflow_name = Column(String(100))
     last_checkin = Column(DateTime, server_default=func.now(), onupdate=func.current_timestamp())
 
 
@@ -278,11 +280,11 @@ class DataBaseInterface(object):
         replace the contents of the most recent log
         """
         s = self.Session()
-        if s.query(Log).filter(Log.obsnum == obsnum).count() == 0:
+        if s.query(Log).filter(Log.obsnum == str(obsnum)).count() == 0:
             s.close()
-            self.add_log(obsnum, status, logtext, exit_status)
+            self.add_log(str(obsnum), status, logtext, exit_status)
             return
-        LOG = s.query(Log).filter(Log.obsnum == obsnum).order_by(Log.timestamp.desc()).limit(1).one()
+        LOG = s.query(Log).filter(Log.obsnum == str(obsnum)).order_by(Log.timestamp.desc()).limit(1).one()
         if exit_status is not None:
             LOG.exit_status = exit_status
         if logtext is not None:
@@ -564,15 +566,27 @@ class DataBaseInterface(object):
         status = OBS.status
         return status
 
-    def still_checkin(self, hostname, ip_addr):
+    def get_available_stills(self, workflow_name):
+        since = datetime.datetime.now() - datetime.timedelta(minutes=5)
+        s = self.Session()
+        if s.query(Still).filter(Still.last_checkin > since).count() < 1:
+            print("Could not find any stills available via autodetection through the database")
+            sys.exit(1)
+        else:
+            stills = s.query(Still).filter(Still.last_checkin > since, Still.workflow_name == workflow_name)
+
+        s.close()
+        return stills
+
+    def still_checkin(self, hostname, ip_addr, workflow_name, port):
         s = self.Session()
         print("Got run in thread!")
-        if s.query(Still).filter(Still.hostname == hostname).count() > 0:
+        if s.query(Still).filter(Still.hostname == hostname).count() > 0:  # Check if the still already exists, if so just update the time
             still = s.query(Still).filter(Still.hostname == hostname).one()
             still.last_checkin = datetime.datetime.now()
             s.add(still)
-        else:
-            still = Still(hostname=hostname, ip_addr=ip_addr)
+        else:  # Still doesn't exist, lets add it
+            still = Still(hostname=hostname, ip_addr=ip_addr, workflow_name=workflow_name, port=port)
             s.add(still)
 
         s.commit()

@@ -67,7 +67,7 @@ FILE_PROCESSING_LINKS = {'ACQUIRE_NEIGHBORS': 'UVCRE',
 
 class NullAction(sch.Action):
 
-    def _command(self):
+    def run_remote_task(self):
         return
 
 
@@ -193,7 +193,7 @@ class TestSchedulerDB(unittest.TestCase):
 
         class SuccessAction(sch.Action):
 
-            def _command(me):
+            def run_remote_task(me):
                 me.dbi = self.dbi
                 # print "Action setting {obsnum} status to {status}".format(
                 #        status=me.task,obsnum=me.obs)
@@ -230,7 +230,7 @@ class TestSchedulerDB(unittest.TestCase):
 
         class SuccessAction(sch.Action):
 
-            def _command(me):
+            def run_remote_task(me):
                 me.dbi = self.dbi
                 me.dbi.set_obs_status(me.obs, me.task)
                 print("Action has status: %s") % (me.dbi.get_obs_status(me.obs))
