@@ -4,6 +4,7 @@ import argparse
 import configparser
 import os
 import sys
+import curses
 
 #  Setup the lib path ./lib/  as a spot to check for python libraries
 basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
@@ -61,6 +62,7 @@ class SpawnerClass:
         self.timeout = 60
         self.sleep_time = 10
         self.block_size = 10
+        self.window = ''
 
 
 class StillScheduler(Scheduler):
@@ -207,7 +209,7 @@ def start_server(sg, wf):
     return
 
 
-def main():
+def main(window):
     sg = SpawnerClass()
     workflow_objects = WorkFlow()
 
@@ -233,6 +235,7 @@ def main():
     # Create database interface with SQL Alchemy
 
     sg.dbi = get_dbi_from_config(sg.config_file)
+    sg.window = window
     if args.client is True:
         start_client(sg, workflow_objects, args)
     elif args.server is True:
@@ -243,4 +246,4 @@ def main():
     pass
 
 if __name__ == "__main__":
-    main()
+    curses.wrapper(main)

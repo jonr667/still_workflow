@@ -12,7 +12,6 @@ from sqlalchemy.orm import relationship, backref, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
-# from sqlalchemy.pool import QueuePool
 
 # from still_shared import logger
 
@@ -25,7 +24,7 @@ Base = declarative_base()
 
 #########
 #
-#   Useful helper functions
+#   Helper functions
 #
 #####
 def jdpol2obsnum(jd, pol, djd):
@@ -69,9 +68,6 @@ def md5sum(fname):
     return hasher.hexdigest()
 
 
-def gethostname():
-    hn = Popen(['bash', '-cl', 'hostname'], stdout=PIPE).communicate()[0].strip()
-    return hn
 #############
 #
 #   The basic definition of our database

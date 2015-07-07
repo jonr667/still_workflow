@@ -1,7 +1,10 @@
 import time
 import sys
 import logging
+# import readchar
 import os
+import Tkinter as tk
+
 from task_server import TaskClient
 # import datetime
 # from still_shared import logger
@@ -99,7 +102,6 @@ class Scheduler:
     '''A Scheduler reads a DataBaseInterface to determine what Actions can be
     taken, and then schedules them on stills according to priority.'''
 
-    # Jon : This is done via init, we may want to rewrite this part to do it as a __init__
     # to make instantiating the object little nicer
     def __init__(self, task_clients, workflow, dbi='', nstills=4, actions_per_still=8, transfers_per_still=2, blocksize=10, timeout=3600):
         '''nstills:           # of stills in system,
@@ -127,14 +129,6 @@ class Scheduler:
 
         self.timeout = timeout
         self.sleep = 0.5
-        # dict of {obsid+status,failcount}
-        # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        # fh = logging.StreamHandler()
-        # fh.setFormatter(formatter)
-        # fh.setLevel(logging.INFO)
-        # logger.addHandler(fh)
-        # logger.setLevel(logging.DEBUG)
-        # logger.info('setting up stream')
 
     def find_all_stills(self):
         stills = self.dbi.get_available_stills(self.wf.name)
@@ -155,7 +149,6 @@ class Scheduler:
     def start(self, dbi, ActionClass=None, action_args=()):
         '''Begin scheduling (blocking).
         dbi: DataBaseInterface'''
-
         print(self.wf.action_prereqs)
         self._run = True
         logger.info('Scheduler.start: entering loop')
@@ -186,6 +179,10 @@ class Scheduler:
                         break  # move on to next still
                     self.launch_action(a)
             self.clean_completed_actions(self.dbi)
+
+#            if window.getch() == 'q':
+#                self.quit()
+
             time.sleep(self.sleep)
 
     def pop_action_queue(self, still, tx=False):
@@ -257,12 +254,9 @@ class Scheduler:
         # was called, clean_completed_actions() must be called first to ensure
         # that cleanup occurs before.  Is this true? if so, should add mechanism
         # to ensure ordering
-        # Jon: Change this so that it lets the database select all the recoreds that
-        # are not complete or we could be loading in thousands of records for this
         observations = dbi.list_open_observations()
 
-#        for open_obs in dbi.list_open_observations():  # Jon: replaced the above with this one that throws out NEW and COMPLETE obsid's
-        for open_obs in observations:  # Jon: replaced the above with this one that throws out NEW and COMPLETE obsid'self
+        for open_obs in observations:
 
             if open_obs not in self._active_obs_dict:
                     self._active_obs_dict[open_obs] = len(self.active_obs)
@@ -273,7 +267,6 @@ class Scheduler:
         '''Based on the current list of active obs (which you might want
         to update first), generate a prioritized list of actions that
         can be taken.'''
-        # Jon : We should look into using db filters here instead of these loops
         failed = dbi.get_terminal_obs()
         for f in self.active_obs:
             print("My active obs...: %s") % f
