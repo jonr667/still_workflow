@@ -3,7 +3,8 @@ import sys
 import logging
 # import readchar
 import os
-import Tkinter as tk
+import datetime
+import time
 
 from task_server import TaskClient
 # import datetime
@@ -12,8 +13,6 @@ from task_server import TaskClient
 #  Setup the lib path ./lib/  as a spot to check for python libraries
 #basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
 #sys.path.append(basedir + 'bin')
-
-#from still.SpawnerClass import find_all_stills
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -120,25 +119,39 @@ class Scheduler:
         self._run = False
         self.failcount = {}
         self.wf = workflow  # Jon: Moved the workflow class to instantiated on object creation, should do the same for dbi probably
+        self.task_clients = []
         # If task_clients is set to AUTO then check the db for still servers
-
         if task_clients[0].host_port[0] == "AUTO":
-            self.task_clients = self.find_all_stills()
+            self.find_all_stills()
+            self.auto = 1
         else:
+            self.auto = 0
             self.task_clients = task_clients
 
         self.timeout = timeout
         self.sleep = 0.5
 
     def find_all_stills(self):
-        stills = self.dbi.get_available_stills(self.wf.name)
+        exists = False
         print("looking for stills...")
-        #    def __init__(self, dbi, host, workflow, port=STILL_PORT):
+        stills = self.dbi.get_available_stills()
+        while stills.count() < 1:
+            print("Can't find any stills! Waiting for 10sec and trying again")
+            time.sleep(10)
+            stills = self.dbi.get_available_stills(self.wf.name)
 
         for still in stills:
-            print("Found still : %s") % still.hostname
-        task_clients = [TaskClient(self.dbi, s.hostname, self.wf, port=still.port) for s in stills]
-        return task_clients
+            print(still.hostname)
+            for client in self.task_clients:
+                if still.hostname == client.host_port[0]:
+                    exists = True
+                    break
+
+            if exists is False:
+                print("Found still : %s") % still.hostname
+                self.task_clients.append(TaskClient(self.dbi, still.hostname, self.wf, port=still.port))
+                self.launched_actions[len(self.task_clients) - 1] = []
+        return
 
     def quit(self):
         self._run = False
@@ -153,8 +166,13 @@ class Scheduler:
         self._run = True
         logger.info('Scheduler.start: entering loop')
         self.dbi = dbi
-        while self._run:
+        last_checked_for_stills = time.time()
 
+        while self._run:
+            if (time.time() - last_checked_for_stills) > 10:
+                self.find_all_stills()
+                last_checked_for_stills = time.time()
+            logger.debug("Number of stills : %s" % len(self.task_clients))
             # tic = time.time()
             self.ext_command_hook()
             logger.info("getting active obs")
@@ -168,14 +186,14 @@ class Scheduler:
                     try:
                         a = self.pop_action_queue(still, tx=False)
                     except(IndexError):  # no actions can be taken on this still
-                        logger.info('No actions available for still-%d\n' % still)
+                        logger.info('No actions available for still : %d\n' % still)
                         break  # move on to next still
                     self.launch_action(a)
                 while len(self.get_launched_actions(still, tx=True)) < self.transfers_per_still:
                     try:
                         a = self.pop_action_queue(still, tx=True)
                     except(IndexError):  # no actions can be taken on this still
-                        logger.info('No actions available for still-%d\n' % still)
+                        logger.info('No actions available for still : %d\n' % still)
                         break  # move on to next still
                     self.launch_action(a)
             self.clean_completed_actions(self.dbi)
@@ -318,14 +336,12 @@ class Scheduler:
         # Jon : just for some info on neighbors, remove later
         print("Neighbor Status : ", neighbor_status)
 
-        # XXX shoudl check first if obs has been assigned to a still in the db already and continue to use that
-        # and only generate a new still # if it hasn't been assigned one already.
-        still = self.obs_to_still(obs)
+        still = self.obs_to_still(obs)  # Get a still for a new obsid if one doesn't already exist
         if ActionClass is None:
             ActionClass = Action
 
         a = ActionClass(obs, next_step, neighbor_status, still, self.wf, timeout=self.timeout, task_clients=self.task_clients)
-#            def __init__(self, obs, task, neighbor_status, still, workflow, timeout=3600.):
+
         if self.wf.neighbors == 1:
             if a.has_prerequisites():
                 return a
@@ -345,7 +361,26 @@ class Scheduler:
         # partially completed tasks that are failing for some reason
 
     def obs_to_still(self, obs):
-        '''Return the still that a obs should be transferred to.'''
+        ##############
+        #   Check if a obsid has a still already, if it does simply return it.  If it does not then lets find the lowest
+        #   loaded (cpu) one and assign it.  If none are under 80% then lets just wait around, they're busy enough as is.
+        ##############
+        mystill = self.dbi.get_obs_still_host(obs)
+        if mystill:
+            print("Already have a still assigned!")
+            return int(mystill)
+        else:
+            self.find_all_stills()  # Update stills to make sure we have them all loaded
+            still = self.dbi.get_most_available_still()
+            while not still:
 
-        mystill = (int(obs) / self.blocksize) % self.nstills
-        return mystill
+                logger.info("Can't find any available still servers, they are all above 80% usage or have gone offline.  Waiting...")
+                time.sleep(10)
+                still = self.dbi.get_most_available_still()
+
+            print("Got still hostname %s") % still.hostname
+            for client_index, client in enumerate(self.task_clients):
+                if client.host_port[0] == still.hostname:
+                    mystill = client_index
+                    break
+        return int(mystill)

@@ -4,7 +4,6 @@ import argparse
 import configparser
 import os
 import sys
-import curses
 
 #  Setup the lib path ./lib/  as a spot to check for python libraries
 basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
@@ -29,7 +28,7 @@ class WorkFlow:
     #
 
     def __init__(self):
-        self.name = ''
+
         self.workflow_actions = ''
         self.action_prereqs = {}
         self.action_args = {}
@@ -151,12 +150,13 @@ def process_client_config_file(sg, wf):
         wf.workflow_actions_endfile = tuple(get_config_entry(config, 'WorkFlow', 'actions_endfile', reqd=False, remove_spaces=True).split(","))
         wf.prioritize_obs = int(get_config_entry(config, 'WorkFlow', 'prioritize_obs', reqd=False, remove_spaces=True, default_val=0))
         wf.still_locked_after = get_config_entry(config, 'WorkFlow', 'still_locked_after', reqd=False, remove_spaces=True)
-        wf.name = get_config_entry(config, 'WorkFlow', 'name', reqd=True, remove_spaces=True)
         wf.neighbors = int(get_config_entry(config, 'WorkFlow', 'neighbors', reqd=False, remove_spaces=False, default_val=0))
 
-        for action in wf.workflow_actions:  # Collect all the prereqs and arg strings for any action of the workflow and throw them into a dict of keys and lists
+        for action in wf.workflow_actions or wf.workflow_actions_endfile:  # Collect all the prereqs and arg strings for any action of the workflow and throw them into a dict of keys and lists
             wf.action_args[action] = '[\'%s:%s/%s\' % (pot, path, basename)]'  # Put in a default host:path/filename for each actions arguements that get passed to do_ scripts
+
             if action in config_sections:
+
                 wf.action_prereqs[action] = get_config_entry(config, action, 'prereqs', reqd=False, remove_spaces=True).split(",")
                 wf.action_args[action] = get_config_entry(config, action, 'args', reqd=False, remove_spaces=True)
     else:
@@ -204,12 +204,12 @@ def start_server(sg, wf):
     # Instantiate a still server instance
     #
 
-    task_server = TaskServer(sg.dbi, workflow_name=wf.name, data_dir=sg.data_dir, port=sg.port)
+    task_server = TaskServer(sg.dbi, data_dir=sg.data_dir, port=sg.port)
     task_server.start()
     return
 
 
-def main(window):
+def main():
     sg = SpawnerClass()
     workflow_objects = WorkFlow()
 
@@ -235,7 +235,7 @@ def main(window):
     # Create database interface with SQL Alchemy
 
     sg.dbi = get_dbi_from_config(sg.config_file)
-    sg.window = window
+
     if args.client is True:
         start_client(sg, workflow_objects, args)
     elif args.server is True:
@@ -246,4 +246,4 @@ def main(window):
     pass
 
 if __name__ == "__main__":
-    curses.wrapper(main)
+    main()

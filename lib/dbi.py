@@ -158,8 +158,9 @@ class Still(Base):
     hostname = Column(String(100), primary_key=True)
     ip_addr = Column(String(50))
     port = Column(BigInteger)
-    workflow_name = Column(String(100))
     last_checkin = Column(DateTime, server_default=func.now(), onupdate=func.current_timestamp())
+    status = Column(String(100))
+    current_load = Column(Integer)
 
 
 class DataBaseInterface(object):
@@ -562,34 +563,41 @@ class DataBaseInterface(object):
         status = OBS.status
         return status
 
-    def get_available_stills(self, workflow_name):
-        since = datetime.datetime.now() - datetime.timedelta(minutes=5)
+    def get_available_stills(self):
+        since = datetime.datetime.now() - datetime.timedelta(minutes=3)
         s = self.Session()
-        if s.query(Still).filter(Still.last_checkin > since).count() < 1:
-            print("Could not find any stills available via autodetection through the database")
-            sys.exit(1)
-        else:
-            stills = s.query(Still).filter(Still.last_checkin > since, Still.workflow_name == workflow_name)
+
+        stills = s.query(Still).filter(Still.last_checkin > since)
 
         s.close()
         return stills
 
-    def still_checkin(self, hostname, ip_addr, workflow_name, port):
+    def still_checkin(self, hostname, ip_addr, port, load, status="OK"):
         s = self.Session()
-        print("Got run in thread!")
+
         if s.query(Still).filter(Still.hostname == hostname).count() > 0:  # Check if the still already exists, if so just update the time
             still = s.query(Still).filter(Still.hostname == hostname).one()
             still.last_checkin = datetime.datetime.now()
+            still.status = status
+            still.current_load = load
             s.add(still)
         else:  # Still doesn't exist, lets add it
-            still = Still(hostname=hostname, ip_addr=ip_addr, workflow_name=workflow_name, port=port)
+            still = Still(hostname=hostname, ip_addr=ip_addr,  port=port, current_load=load, status=status)
             s.add(still)
 
         s.commit()
         s.close()
         return 0
 
-# def get_neighbors(self,obsnum):
+    def get_most_available_still(self):
+        s = self.Session()
+        since = datetime.datetime.now() - datetime.timedelta(minutes=3)
+        still = s.query(Still).filter(Still.last_checkin > since, Still.status == "OK", Still.current_load < 80).order_by(Still.current_load).first()
+        s.close()
+
+        return still
+
+        # def get_neighbors(self,obsnum):
 #        """
 #        for now lets search for neighbors based on time
 #        formally, look for observations within 1.2 of the length of the input

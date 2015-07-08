@@ -5,6 +5,8 @@ import time
 import socket
 import os
 import tempfile
+
+
 # import scheduler
 # import string
 import sys
@@ -232,11 +234,19 @@ class TaskHandler(SocketServer.StreamRequestHandler):
 
         print "{} wrote:".format(self.client_address[0])
         print self.data
-        print("I got stuffs!")
+
         task, obs, still, args = self.get_pkt()
         logger.info('TaskHandler.handle: received (%s,%s) with args=%s' % (task, obs, ' '.join(args)))
         if task == 'KILL':
-            self.server.kill(int(args[0]))  # TODO I THINK THIS IS WHERE WE HAVE A PROBLEM. RUN and maybe COMPLETE need to clean up existing threads.
+            hostname = socket.gethostname()
+            ip_addr = socket.gethostbyname(hostname)
+            cpu_usage = psutil.cpu_percent()
+            self.server.dbi.still_checkin(hostname, ip_addr, self.server.port, int(cpu_usage), status="OFFLINE")
+            logger.info("We recieved a kill request, shutting down")
+
+            os._exit(0)  # This does not shut us down cleanly... but it DOES shut us down.
+#            self.server.shutdown()  # TODO I THINK THIS IS WHERE WE HAVE A PROBLEM. RUN and maybe COMPLETE need to clean up existing threads.
+
         elif task == 'COMPLETE':  # HARDWF, JON: This one should be ok but complete still needs to be in conf file.  Though Maybe just make last thing in conf file what we use here?
             self.server.dbi.set_obs_status(obs, task)
         else:
@@ -248,7 +258,7 @@ class TaskHandler(SocketServer.StreamRequestHandler):
 class TaskServer(SocketServer.TCPServer):
     allow_reuse_address = True
 
-    def __init__(self, dbi, data_dir='.', port=STILL_PORT, handler=TaskHandler, workflow_name=''):
+    def __init__(self, dbi, data_dir='.', port=STILL_PORT, handler=TaskHandler):
         SocketServer.TCPServer.__init__(self, ('', port), handler)
         self.active_tasks_semaphore = threading.Semaphore()
         self.active_tasks = []
@@ -257,8 +267,6 @@ class TaskServer(SocketServer.TCPServer):
         self.is_running = False
         self.watchdog_count = 0
         self.port = port
-        self.workflow_name = workflow_name
-#        self.rfile = self.rfile
 
     def append_task(self, t):
         self.active_tasks_semaphore.acquire()
@@ -300,20 +308,30 @@ class TaskServer(SocketServer.TCPServer):
                 task.kill()
                 break
 
+    def kill_all(self):
+        for task in self.active_tasks:
+                task.kill()
+                break
+
     def checkin_timer(self):
         #
         # Just a timer that will update that its last_checkin time in the database every 5min
         #
-        while True:
+        while self.is_running is True:
             hostname = socket.gethostname()
             ip_addr = socket.gethostbyname(hostname)
-            self.dbi.still_checkin(hostname, ip_addr, self.workflow_name, self.port)
-            time.sleep(180)
+            cpu_usage = psutil.cpu_percent()
+            print("CPU USAGE : %s") % cpu_usage
+            self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), status="OK")
+            time.sleep(60)
         return 0
 
     def start(self):
+        psutil.cpu_percent()
+        time.sleep(1)
         self.is_running = True
         t = threading.Thread(target=self.finalize_tasks)
+        t.daemon = True
         t.start()
         logger.debug('this is scheduler.py')
         logger.debug("using code at: " + __file__)
@@ -327,10 +345,15 @@ class TaskServer(SocketServer.TCPServer):
             self.serve_forever()
         finally:
             self.shutdown()
-            t.join()
+#            t.join()
 
     def shutdown(self):
         print("getting to shutdown!!")
+        hostname = socket.gethostname()
+        ip_addr = socket.gethostbyname(hostname)
+        cpu_usage = psutil.cpu_percent()
+        self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), status="OFFLINE")
+
         self.is_running = False
         for t in self.active_tasks:
             try:
