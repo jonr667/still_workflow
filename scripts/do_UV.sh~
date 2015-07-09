@@ -1,4 +1,4 @@
 #!/bin/bash
 
-echo "Hello Jon!!!!!"
+echo "$@"
 exit 0

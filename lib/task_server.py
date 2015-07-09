@@ -5,7 +5,7 @@ import time
 import socket
 import os
 import tempfile
-
+import platform
 
 # import scheduler
 # import string
@@ -19,7 +19,7 @@ logger.setLevel(logging.DEBUG)
 logger.propagate = True
 PKT_LINE_LEN = 160
 STILL_PORT = 14204
-
+PLATFORM = platform.system()
 
 def pad(s, line_len=PKT_LINE_LEN):
 
@@ -73,7 +73,8 @@ class Task:
         self.outfile_counter = 0
         try:
             process = psutil.Popen(['/Users/wintermute/mwa_pipeline/scripts/do_%s.sh' % self.task] + self.args, cwd=self.cwd, stderr=self.OUTFILE, stdout=self.OUTFILE)
-            process.cpu_affinity(range(psutil.cpu_count()))
+            if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup...
+                process.cpu_affinity(range(psutil.cpu_count()))
             self.dbi.add_log(self.obs, self.task, ' '.join(['do_%s.sh' % self.task] + self.args + ['\n']), None)
         except Exception, e:
             logger.error('Task._run: (%s,%s) %s error="%s"' % (self.task, self.obs, ' '.join(['do_%s.sh' % self.task] + self.args), e))
@@ -322,6 +323,7 @@ class TaskServer(SocketServer.TCPServer):
             ip_addr = socket.gethostbyname(hostname)
             cpu_usage = psutil.cpu_percent()
             print("CPU USAGE : %s") % cpu_usage
+
             self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), status="OK")
             time.sleep(60)
         return 0

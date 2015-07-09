@@ -1,6 +1,6 @@
 import os
 import sys
-# import logging
+import logging
 import hashlib
 import datetime
 
@@ -19,14 +19,18 @@ from sqlalchemy.pool import StaticPool
 Base = declarative_base()
 
 # Jon : Not sure why the logger is defined here?
-# logger = logging.getLogger('dbi')
 
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger('dbi')
+logger.setLevel(logging.DEBUG)
 
 #########
 #
 #   Helper functions
 #
 #####
+
+
 def jdpol2obsnum(jd, pol, djd):
     """
     input: julian date float, pol string. and length of obs in fraction of julian date
@@ -114,7 +118,6 @@ class File(Base):
     filenum = Column(Integer, primary_key=True)
     filename = Column(String(200))
     host = Column(String(100))
-    # obsnum = Column(BigInteger, ForeignKey('observation.obsnum'))
     obsnum = Column(String(100), ForeignKey('observation.obsnum'))
     # this next line creates an attribute Observation.files which is the list of all
     #  files associated with this observation
@@ -124,33 +127,34 @@ class File(Base):
 
 class Log(Base):
     __tablename__ = 'log'
-    lognum = Column(Integer, primary_key=True)
+    lognum = Column(BigInteger, primary_key=True)
 #    obsnum = Column(BigInteger, ForeignKey('observation.obsnum'))
-    obsnum = Column(String(100), ForeignKey('observation.obsnum'))
+    # Jon: obsnum = Column(String(100), ForeignKey('observation.obsnum'))
     # Jon: There may be a very good reason to not just make this a string and I'm sure I will find out what it is soon enough
+    obsnum = Column(String(100))
     stage = Column(String(200))
     # stage = Column(Enum(*FILE_PROCESSING_STAGES, name='FILE_PROCESSING_STAGES'))
     exit_status = Column(Integer)
     timestamp = Column(DateTime, nullable=False, default=func.current_timestamp())
     logtext = Column(Text)
-    observation = relationship(Observation, backref=backref('logs', uselist=True), cascade="all, delete-orphan", single_parent=True)
+    # observation = relationship(Observation, backref=backref('logs', uselist=True), cascade="all, delete-orphan", single_parent=True)
 
 
 # note the Cal object/table is added here
 # to provide support for omnical.
 # the DataBaseInterface Class does not currently support Cal
-class Cal(Base):
-    __tablename__ = 'cal'
-    calnum = Column(Integer, primary_key=True)
-    # obsnum = Column(BigInteger, ForeignKey('observation.obsnum'))
-    obsnum = Column(String(100), ForeignKey('observation.obsnum'))
-    last_activity = Column(DateTime, nullable=False, default=func.current_timestamp())
-    cal_date = Column(DateTime)
-    calfile = Column(Text)
-    output_dir = Column(Text)
-    input_file = Column(Text)
-    logtext = Column(Text)
-    observation = relationship(Observation, backref=backref('cals', uselist=True), cascade="all, delete-orphan", single_parent=True)
+# class Cal(Base):
+#    __tablename__ = 'cal'
+#    calnum = Column(Integer, primary_key=True)
+#    # obsnum = Column(BigInteger, ForeignKey('observation.obsnum'))
+#    obsnum = Column(String(100), ForeignKey('observation.obsnum'))
+#    last_activity = Column(DateTime, nullable=False, default=func.current_timestamp())
+#    cal_date = Column(DateTime)
+#    calfile = Column(Text)
+#    output_dir = Column(Text)
+#    input_file = Column(Text)
+#    logtext = Column(Text)
+#    observation = relationship(Observation, backref=backref('cals', uselist=True), cascade="all, delete-orphan", single_parent=True)
 
 
 class Still(Base):
@@ -161,6 +165,9 @@ class Still(Base):
     last_checkin = Column(DateTime, server_default=func.now(), onupdate=func.current_timestamp())
     status = Column(String(100))
     current_load = Column(Integer)
+    number_of_cores = Column(Integer)  # Jon : Placeholder for future expansion
+    free_memory = Column(Integer)      # Jon : Placeholder for future expansion
+    total_memory = Column(Integer)     # Jon : Placeholder for future expansion
 
 
 class DataBaseInterface(object):
@@ -238,7 +245,7 @@ class DataBaseInterface(object):
         todo:test
         """
         s = self.Session()
-        print("My obsnum! %s") % obsnum
+        #print("My obsnum! %s") % obsnum
         OBS = s.query(Observation).filter(Observation.obsnum == str(obsnum)).one()
         s.close()
         return OBS
@@ -572,6 +579,12 @@ class DataBaseInterface(object):
         s.close()
         return stills
 
+    def get_still_info(self, hostname):
+        s = self.Session()
+        still = s.query(Still).filter(Still.hostname == hostname).first()
+        s.close()
+        return still
+
     def still_checkin(self, hostname, ip_addr, port, load, status="OK"):
         s = self.Session()
 
@@ -582,7 +595,7 @@ class DataBaseInterface(object):
             still.current_load = load
             s.add(still)
         else:  # Still doesn't exist, lets add it
-            still = Still(hostname=hostname, ip_addr=ip_addr,  port=port, current_load=load, status=status)
+            still = Still(hostname=hostname, ip_addr=ip_addr, port=port, current_load=load, status=status)
             s.add(still)
 
         s.commit()

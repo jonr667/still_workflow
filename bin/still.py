@@ -58,7 +58,7 @@ class SpawnerClass:
         self.hosts = []
         self.port = 14204
         self.actions_per_still = 8
-        self.timeout = 60
+        self.timeout = 3600
         self.sleep_time = 10
         self.block_size = 10
         self.window = ''
@@ -144,7 +144,7 @@ def process_client_config_file(sg, wf):
         sg.timeout = int(get_config_entry(config, 'Still', 'timeout', reqd=False, remove_spaces=True))
         sg.block_size = int(get_config_entry(config, 'Still', 'block_size', reqd=False, remove_spaces=True))
         sg.actions_per_still = int(get_config_entry(config, 'Still', 'actions_per_still', reqd=False, remove_spaces=True, default_val=8))
-
+        sg.sleep_time = int(get_config_entry(config, 'Still', 'sleep_time', reqd=False, remove_spaces=True))
         # Read in all the workflow information
         wf.workflow_actions = tuple(get_config_entry(config, 'WorkFlow', 'actions', reqd=True, remove_spaces=True).split(","))
         wf.workflow_actions_endfile = tuple(get_config_entry(config, 'WorkFlow', 'actions_endfile', reqd=False, remove_spaces=True).split(","))
@@ -192,7 +192,7 @@ def start_client(sg, wf, args):
         sys.exit(1)
 
     task_clients = [TaskClient(sg.dbi, s, wf, port=sg.port) for s in sg.hosts]
-    myscheduler = StillScheduler(task_clients, wf, dbi=sg.dbi, actions_per_still=sg.actions_per_still, blocksize=sg.block_size, nstills=len(sg.hosts), timeout=sg.sleep_time)  # Init scheduler daemon
+    myscheduler = StillScheduler(task_clients, wf, dbi=sg.dbi, actions_per_still=sg.actions_per_still, blocksize=sg.block_size, nstills=len(sg.hosts), timeout=sg.timeout, sleep=sg.sleep_time)  # Init scheduler daemon
 
     myscheduler.start(dbi=sg.dbi, ActionClass=Action)
 

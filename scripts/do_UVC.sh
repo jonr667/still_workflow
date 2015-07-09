@@ -1,4 +1,5 @@
 #!/bin/bash
 
 echo "$@"
-exit 1
+sleep 60
+exit 0

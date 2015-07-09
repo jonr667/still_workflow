@@ -20,7 +20,7 @@ TEST_PORT = 14204
 
 class NullAction(sch.Action):
 
-    def _command(self):
+    def run_remote_task(self):
         return
 
 
@@ -128,7 +128,7 @@ class TestScheduler(unittest.TestCase):
         process_client_config_file(self.sg, self.wf)
 
         class FakeAction(sch.Action):
-            def _command(self):
+            def run_remote_task(self):
                 dbi.files[self.filename] = self.task
         self.FakeAction = FakeAction
         self.task_clients = TaskClient(dbi, 'localhost', self.wf, port=TEST_PORT)
@@ -197,7 +197,7 @@ class TestScheduler(unittest.TestCase):
     def test_clean_completed_actions(self):
         dbi = FakeDataBaseInterface(10)
         class FakeAction(sch.Action):
-            def _command(self):
+            def run_remote_task(self):
                 dbi.files[self.obs] = self.task
 
         s = sch.Scheduler(self.task_clients, self.wf, nstills=1, actions_per_still=1, blocksize=10)
@@ -223,7 +223,7 @@ class TestScheduler(unittest.TestCase):
         dbi = FakeDataBaseInterface(10)
 
         class FakeAction(sch.Action):
-            def _command(self):
+            def run_remote_task(self):
                 dbi.files[self.obs] = self.task
 
         def all_done():
@@ -253,7 +253,7 @@ class TestScheduler(unittest.TestCase):
                 def __init__(self, f, task, neighbors, still, wf):
                     sch.Action.__init__(self, f, task, neighbors, still, wf, timeout=.01)
 
-                def _command(self):
+                def run_remote_task(self):
                     if random.random() > .5:
                         dbi.files[self.obs] = self.task
 
