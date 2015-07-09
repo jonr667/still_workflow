@@ -11,8 +11,8 @@ from task_server import TaskClient
 # from still_shared import logger
 
 #  Setup the lib path ./lib/  as a spot to check for python libraries
-#basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
-#sys.path.append(basedir + 'bin')
+# basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
+# sys.path.append(basedir + 'bin')
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

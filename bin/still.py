@@ -243,7 +243,6 @@ def main():
     else:
         print("You must specify to start this as a client or server (--client or --server)")
 
-    pass
 
 if __name__ == "__main__":
     main()
