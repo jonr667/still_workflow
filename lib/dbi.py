@@ -146,7 +146,7 @@ class Still(Base):
     ip_addr = Column(String(50))
     port = Column(BigInteger)
     data_dir = Column(String(200))
-    last_checkin = Column(DateTime, server_default=func.now(), onupdate=func.current_timestamp())
+    last_checkin = Column(DateTime, default=datetime.datetime.now(), onupdate=datetime.datetime.now())
     status = Column(String(100))
     current_load = Column(Integer)
     number_of_cores = Column(Integer)  # Jon : Placeholder for future expansion
@@ -165,16 +165,16 @@ class DataBaseInterface(object):
             self.engine = create_engine('sqlite:///', connect_args={'check_same_thread': False}, poolclass=StaticPool)
             self.createdb()
         elif dbtype == 'postgresql':
-                try:
-                    self.engine = create_engine('postgresql+psycopg2://{0}:{1}@{2}:{3}/{4}'.format(dbuser, dbpasswd, dbhost, dbport, dbname), echo=False)  # Set echo=True to Enable debug mode
-                except:
-                    print("Could not connect to the postgresql database.")
-                    sys.exit(1)
-        elif dbtype == 'mysql':
             try:
-                self.engine = create_engine('mysql://{0}:{1}@{2}:{3}/{4}'.format(dbuser, dbpasswd, dbhost, dbport, dbname), pool_size=20, max_overflow=40)
+                self.engine = create_engine('postgresql+psycopg2://{0}:{1}@{2}:{3}/{4}'.format(dbuser, dbpasswd, dbhost, dbport, dbname), echo=False)  # Set echo=True to Enable debug mode
             except:
                 print("Could not connect to the postgresql database.")
+                sys.exit(1)
+        elif dbtype == 'mysql':
+            try:
+                self.engine = create_engine('mysql://{0}:{1}@{2}:{3}/{4}'.format(dbuser, dbpasswd, dbhost, dbport, dbname), pool_size=20, max_overflow=40, echo=False)
+            except:
+                print("Could not connect to the mysql database.")
                 sys.exit(1)
         try:
             self.Session = sessionmaker(bind=self.engine)
