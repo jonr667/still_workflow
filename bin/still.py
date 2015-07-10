@@ -64,6 +64,9 @@ class SpawnerClass:
         self.lock_all_neighbors_to_same_still = 0
         self.transfers_per_still = 2
 
+        basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
+        self.path_to_do_scripts = basedir + 'scripts/'
+
 
 class StillScheduler(Scheduler):
     #
@@ -141,7 +144,8 @@ def process_client_config_file(sg, wf):
         # Read in all the STILL information
         sg.hosts = get_config_entry(config, 'Still', 'hosts', reqd=True, remove_spaces=True).split(",")
         sg.port = int(get_config_entry(config, 'Still', 'port', reqd=True, remove_spaces=True))
-        sg.data_dir = get_config_entry(config, 'Still', 'data_dir', reqd=True, remove_spaces=False)
+        sg.data_dir = get_config_entry(config, 'Still', 'data_dir', reqd=False, remove_spaces=False)
+        sg.path_to_do_scripts = get_config_entry(config, 'Still', 'path_to_do_scripts', reqd=False, remove_spaces=False)
         sg.timeout = int(get_config_entry(config, 'Still', 'timeout', reqd=False, remove_spaces=True))
         sg.block_size = int(get_config_entry(config, 'Still', 'block_size', reqd=False, remove_spaces=True))
         sg.actions_per_still = int(get_config_entry(config, 'Still', 'actions_per_still', reqd=False, remove_spaces=True, default_val=8))
@@ -215,7 +219,7 @@ def start_server(sg, wf, args):
     else:
         my_port = sg.port
 
-    task_server = TaskServer(sg.dbi, data_dir=mydata_dir, port=my_port)
+    task_server = TaskServer(sg.dbi, data_dir=mydata_dir, port=my_port, path_to_do_scripts=sg.path_to_do_scripts)
     task_server.start()
     return
 

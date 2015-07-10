@@ -56,7 +56,7 @@ def from_pkt(pkt, line_len=PKT_LINE_LEN):
 
 
 class Task:
-    def __init__(self, task, obs, still, args, dbi, cwd='.'):
+    def __init__(self, task, obs, still, args, dbi, cwd='.', path_to_do_scripts="."):
         self.task = task
         self.obs = obs
         self.still = still
@@ -66,6 +66,7 @@ class Task:
         self.process = None
         self.OUTFILE = tempfile.TemporaryFile()
         self.outfile_counter = 0
+        self.path_to_do_scripts = path_to_do_scripts
 
     def run(self):
         if self.process is not None:
@@ -78,17 +79,18 @@ class Task:
 
     def _run(self):
         process = None
+        print("PATh to do scripts : %s") % self.path_to_do_scripts
         logger.info('Task._run: (%s, %s) %s cwd=%s' % (self.task, self.obs, ' '.join(['do_%s.sh' % self.task] + self.args), self.cwd))
         # create a temp file descriptor for stdout and stderr
         self.OUTFILE = tempfile.TemporaryFile()
         self.outfile_counter = 0
         try:
-            process = psutil.Popen(['/Users/wintermute/mwa_pipeline/scripts/do_%s.sh' % self.task] + self.args, cwd=self.cwd, stderr=self.OUTFILE, stdout=self.OUTFILE)
+            process = psutil.Popen(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args, cwd=self.cwd, stderr=self.OUTFILE, stdout=self.OUTFILE)
             if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
                 process.cpu_affinity(range(psutil.cpu_count()))
-            self.dbi.add_log(self.obs, self.task, ' '.join(['do_%s.sh' % self.task] + self.args + ['\n']), None)
+            self.dbi.add_log(self.obs, self.task, ' '.join(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args + ['\n']), None)
         except Exception, e:
-            logger.error('Task._run: (%s,%s) %s error="%s"' % (self.task, self.obs, ' '.join(['do_%s.sh' % self.task] + self.args), e))
+            logger.error('Task._run: (%s,%s) %s error="%s"' % (self.task, self.obs, ' '.join(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args), e))
 #            sys.exit(1)
         return process
 
@@ -269,7 +271,7 @@ class TaskHandler(SocketServer.StreamRequestHandler):
                     break
 
             if task_already_exists is False:
-                t = Task(task, obsnum, still, args, self.server.dbi, self.server.data_dir)
+                t = Task(task, obsnum, still, args, self.server.dbi, self.server.data_dir, self.server.path_to_do_scripts)
                 self.server.append_task(t)
                 t.run()
         return
@@ -278,7 +280,7 @@ class TaskHandler(SocketServer.StreamRequestHandler):
 class TaskServer(SocketServer.TCPServer):
     allow_reuse_address = True
 
-    def __init__(self, dbi, data_dir='.', port=STILL_PORT, handler=TaskHandler):
+    def __init__(self, dbi, data_dir='.', port=STILL_PORT, handler=TaskHandler, path_to_do_scripts="."):
         SocketServer.TCPServer.__init__(self, ('', port), handler)
         self.active_tasks_semaphore = threading.Semaphore()
         self.active_tasks = []
@@ -287,6 +289,8 @@ class TaskServer(SocketServer.TCPServer):
         self.is_running = False
         self.watchdog_count = 0
         self.port = port
+        self.path_to_do_scripts = path_to_do_scripts
+        print("Path to do Scripts (TaskServer) : %s") % self.path_to_do_scripts
         logger.debug("Data_dir : %s" % self.data_dir)
         logger.debug("Port : %s" % self.port)
 
