@@ -135,14 +135,12 @@ class Task:
         print("My Process pid to kill : %s") % myproc.children(recursive=True)
         self.record_failure()
         logger.debug('Task.kill Trying to kill: ({task},{obsnum}) pid={pid}'.format(task=self.task, obsnum=self.obs, pid=self.process.pid))
-        logger.debug('Task.kill Killing {n} children to prevent orphans: ({task},{obsnum})'.format(n=len(self.process.children(recursive=True)), task=self.task, obsnum=self.obs))
+
         for child in self.process.children(recursive=True):
             child.kill()
-        logger.debug('Task.kill Killing shell script: ({task},{obsnum})'.format(task=self.task, obsnum=self.obs))
-        self.process.kill()
 
+        self.process.kill()
         os.wait()
-        logger.debug('Task.kill Successfully killed ({task},{obsnum})'.format(task=self.task, obsnum=self.obs))
 
     def record_launch(self):
         self.dbi.set_obs_pid(self.obs, self.process.pid)
@@ -257,8 +255,7 @@ class TaskHandler(SocketServer.StreamRequestHandler):
             logger.debug("We recieved a kill request for obsnum: %s, shutting down pid: %s" % (obsnum, pid_of_obs_to_kill))
             self.server.kill(pid_of_obs_to_kill)  # It's called obsnum but for the case of the kill the scheduler is packing obsnum field with the pid
 
-
-        elif task == 'COMPLETE':  # HARDWF, JON: This one should be ok but complete still needs to be in conf file.  Though Maybe just make last thing in conf file what we use here?
+        elif task == 'COMPLETE':
             self.server.dbi.set_obs_status(obsnum, task)
 
         else:
