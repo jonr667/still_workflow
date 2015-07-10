@@ -1,3 +1,5 @@
 Prereqs:
 
 pip install configparser
+conda install sqlalchemy
+conda install MySQL-python
