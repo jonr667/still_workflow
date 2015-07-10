@@ -219,6 +219,24 @@ class Scheduler:
 
             time.sleep(self.sleep_time)
 
+    def get_all_neighbors(self, obsnum):
+        ###
+        # get_all_neighbors: Go down (and up) the rabbit hole and find ALL the neighbors of a particular obsid
+        ###
+        neighbor_obs_nums = []
+        neighbor_obs_nums.append(obsnum)  # Go ahead and add the current obsid to the list
+
+        low_obs, high_obs = self.get_neighbors(obsnum)
+        while high_obs is not None:  # Traverse the list UP to find all neighbors above this one
+            neighbor_obs_nums.append(high_obs)
+            high_obs = self.get_neighbors(high_obs)[1]
+
+        while low_obs is not None:  # Traverse the list DOWN to find all neighbors above this one
+            neighbor_obs_nums.append(low_obs)
+            low_obs = self.get_neighbors(low_obs)[0]
+
+        return neighbor_obs_nums
+
     def pop_action_queue(self, still, tx=False):
         '''Return highest priority action for the given still.'''
         # Seems like we're going through all the actions to find the ones for the particular still..
@@ -354,7 +372,7 @@ class Scheduler:
         still = self.obs_to_still(obsnum)  # Get a still for a new obsid if one doesn't already exist, TODO: CHECK NEIGHBORS!
 
         if self.lock_all_neighbors_to_same_still == 1:
-            for neighbor in self.dbi.get_all_neighbors(obsnum):
+            for neighbor in self.get_all_neighbors(obsnum):
                 dbi.set_obs_still_host(neighbor, still)
 
         if still != 0:  # If the obsnum is assigned to a server that doesn't exist at the moment we need to skip it, maybe reassign later

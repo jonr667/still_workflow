@@ -27,7 +27,7 @@ logger.setLevel(logging.DEBUG)
 #########
 #
 #   Helper functions
-#
+#   Jon : Should move both of these to the add_observations for paper instead of here, they are workflow specific and don't interact with the database
 #####
 
 
@@ -52,24 +52,6 @@ def updateobsnum(context):
     return jdpol2obsnum(context.current_parameters['date'],
                         context.current_parameters['pol'],
                         context.current_parameters['length'])
-
-
-def md5sum(fname):
-    """
-    calculate the md5 checksum of a file whose filename entry is fname.
-    """
-    fname = fname.split(':')[-1]
-    BLOCKSIZE = 65536
-    hasher = hashlib.md5()
-    try:
-        afile = open(fname, 'rb')
-    except(IOError):
-        afile = open("%s/visdata" % fname, 'rb')
-    buf = afile.read(BLOCKSIZE)
-    while len(buf) > 0:
-        hasher.update(buf)
-        buf = afile.read(BLOCKSIZE)
-    return hasher.hexdigest()
 
 
 #############
@@ -605,23 +587,4 @@ class DataBaseInterface(object):
         since = datetime.datetime.now() - datetime.timedelta(minutes=3)
         still = s.query(Still).filter(Still.last_checkin > since, Still.status == "OK", Still.current_load < 80).order_by(Still.current_load).first()
         s.close()
-
         return still
-
-    def get_all_neighbors(self, obsnum):
-        ###
-        # get_all_neighbors: Go down (and up) the rabbit hole and find ALL the neighbors of a particular obsid
-        ###
-        neighbor_obs_nums = []
-        neighbor_obs_nums.append(obsnum)  # Go ahead and add the current obsid to the list
-
-        low_obs, high_obs = self.get_neighbors(obsnum)
-        while high_obs is not None:  # Traverse the list UP to find all neighbors above this one
-            neighbor_obs_nums.append(high_obs)
-            high_obs = self.get_neighbors(high_obs)[1]
-
-        while low_obs is not None:  # Traverse the list DOWN to find all neighbors above this one
-            neighbor_obs_nums.append(low_obs)
-            low_obs = self.get_neighbors(low_obs)[0]
-
-        return neighbor_obs_nums
