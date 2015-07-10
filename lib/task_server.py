@@ -21,6 +21,7 @@ PKT_LINE_LEN = 160
 STILL_PORT = 14204
 PLATFORM = platform.system()
 
+
 def pad(s, line_len=PKT_LINE_LEN):
 
     return (s + ' ' * line_len)[:line_len]
@@ -73,7 +74,7 @@ class Task:
         self.outfile_counter = 0
         try:
             process = psutil.Popen(['/Users/wintermute/mwa_pipeline/scripts/do_%s.sh' % self.task] + self.args, cwd=self.cwd, stderr=self.OUTFILE, stdout=self.OUTFILE)
-            if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup...
+            if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
                 process.cpu_affinity(range(psutil.cpu_count()))
             self.dbi.add_log(self.obs, self.task, ' '.join(['do_%s.sh' % self.task] + self.args + ['\n']), None)
         except Exception, e:
@@ -118,8 +119,8 @@ class Task:
             self.record_completion()
 
     def kill(self):
-        # myproc = psutil.Process(pid=self.process.pid)
-        # print("My Process pid in kill : %s") % myproc.children(recursive=True)
+        myproc = psutil.Process(pid=self.process.pid)
+        print("My Process pid to kill : %s") % myproc.children(recursive=True)
         self.record_failure()
         logger.debug('Task.kill Trying to kill: ({task},{obsnum}) pid={pid}'.format(task=self.task, obsnum=self.obs, pid=self.process.pid))
         logger.debug('Task.kill Killing {n} children to prevent orphans: ({task},{obsnum})'.format(n=len(self.process.children(recursive=True)), task=self.task, obsnum=self.obs))
@@ -127,6 +128,7 @@ class Task:
             child.kill()
         logger.debug('Task.kill Killing shell script: ({task},{obsnum})'.format(task=self.task, obsnum=self.obs))
         self.process.kill()
+
         os.wait()
         logger.debug('Task.kill Successfully killed ({task},{obsnum})'.format(task=self.task, obsnum=self.obs))
 
@@ -181,6 +183,7 @@ class TaskClient:
         return status, self.error_count
 
     def gen_args(self, task, obs):
+        args = []
         pot, path, basename = self.dbi.get_input_file(obs)  # Jon: Pot I believe is host where file to process is, basename is just the file name
         outhost, outpath = self.dbi.get_output_location(obs)
         # hosts and paths are not used except for ACQUIRE_NEIGHBORS and CLEAN_NEIGHBORS
@@ -203,14 +206,13 @@ class TaskClient:
                 rv = rv + [neighbors_base[1] + appendage]
             return rv
 
-        try:
-            args = eval(self.wf.action_args[task])
-        except:
-            print("Could not process arguments for task %s please check args for this task in config file") % task
-            print(self.wf.action_args)
-            sys.exit(1)
-        print("My Args!!! : %s") % args
-
+        if task != "STILL_KILL_OBS":
+            try:
+                args = eval(self.wf.action_args[task])
+            except:
+                print("Could not process arguments for task %s please check args for this task in config file") % task
+                print(self.wf.action_args)
+                sys.exit(1)
         return args
 
     def tx_kill(self, obs):
@@ -225,35 +227,42 @@ class TaskHandler(SocketServer.StreamRequestHandler):
 
     def get_pkt(self):
         pkt = self.data
-        task, obs, still, args = from_pkt(pkt)
-        return task, obs, still, args
+        task, obsnum, still, args = from_pkt(pkt)
+        return task, obsnum, still, args
 
     def handle(self):
-
+        task_already_exists = False
         self.data = self.rfile.readline().strip()
         self.wfile.write("OK\n")
 
         print "{} wrote:".format(self.client_address[0])
         print self.data
 
-        task, obs, still, args = self.get_pkt()
-        logger.info('TaskHandler.handle: received (%s,%s) with args=%s' % (task, obs, ' '.join(args)))
-        if task == 'KILL':
-            hostname = socket.gethostname()
-            ip_addr = socket.gethostbyname(hostname)
-            cpu_usage = psutil.cpu_percent()
-            self.server.dbi.still_checkin(hostname, ip_addr, self.server.port, int(cpu_usage), status="OFFLINE")
-            logger.info("We recieved a kill request, shutting down")
+        task, obsnum, still, args = self.get_pkt()
+        logger.info('TaskHandler.handle: received (%s,%s) with args=%s' % (task, obsnum, ' '.join(args)))
+        if task == "STILL_KILL_OBS":  # We should only be killing a process...
+            pid_of_obs_to_kill = self.server.dbi.get_obs_pid(obsnum)
+            logger.debug("We recieved a kill request for obsnum: %s, shutting down pid: %s" % (obsnum, pid_of_obs_to_kill))
+            self.server.kill(pid_of_obs_to_kill)  # It's called obsnum but for the case of the kill the scheduler is packing obsnum field with the pid
 
-            os._exit(0)  # This does not shut us down cleanly... but it DOES shut us down.
-#            self.server.shutdown()  # TODO I THINK THIS IS WHERE WE HAVE A PROBLEM. RUN and maybe COMPLETE need to clean up existing threads.
 
         elif task == 'COMPLETE':  # HARDWF, JON: This one should be ok but complete still needs to be in conf file.  Though Maybe just make last thing in conf file what we use here?
-            self.server.dbi.set_obs_status(obs, task)
+            self.server.dbi.set_obs_status(obsnum, task)
+
         else:
-            t = Task(task, obs, still, args, self.server.dbi, self.server.data_dir)
-            self.server.append_task(t)
-            t.run()
+            print("Existing Tasks: ")
+            for i in self.server.active_tasks:
+                print ("    Active Task: %s, For Obs: %s") % (i.task, i.obs)
+                if i.task == task and i.obs == obsnum:  # We now check to see if the task is already in the list before we go crazy and try to run a second copy
+                    logger.debug("We are currently running this task already. Task: %s , Obs: %s" % (i.task, i.obs))
+                    task_already_exists = True
+                    break
+
+            if task_already_exists is False:
+                t = Task(task, obsnum, still, args, self.server.dbi, self.server.data_dir)
+                self.server.append_task(t)
+                t.run()
+        return
 
 
 class TaskServer(SocketServer.TCPServer):
@@ -268,6 +277,8 @@ class TaskServer(SocketServer.TCPServer):
         self.is_running = False
         self.watchdog_count = 0
         self.port = port
+        logger.debug("Data_dir : %s" % self.data_dir)
+        logger.debug("Port : %s" % self.port)
 
     def append_task(self, t):
         self.active_tasks_semaphore.acquire()
@@ -307,6 +318,7 @@ class TaskServer(SocketServer.TCPServer):
         for task in self.active_tasks:
             if task.process.pid == pid:
                 task.kill()
+                self.active_tasks.remove(task)  # Remove the killed task from the active task list
                 break
 
     def kill_all(self):
@@ -324,7 +336,7 @@ class TaskServer(SocketServer.TCPServer):
             cpu_usage = psutil.cpu_percent()
             print("CPU USAGE : %s") % cpu_usage
 
-            self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), status="OK")
+            self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), self.data_dir, status="OK")
             time.sleep(60)
         return 0
 
@@ -354,7 +366,7 @@ class TaskServer(SocketServer.TCPServer):
         hostname = socket.gethostname()
         ip_addr = socket.gethostbyname(hostname)
         cpu_usage = psutil.cpu_percent()
-        self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), status="OFFLINE")
+        self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), self.data_dir, status="OFFLINE")
 
         self.is_running = False
         for t in self.active_tasks:

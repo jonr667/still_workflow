@@ -140,28 +140,12 @@ class Log(Base):
     # observation = relationship(Observation, backref=backref('logs', uselist=True), cascade="all, delete-orphan", single_parent=True)
 
 
-# note the Cal object/table is added here
-# to provide support for omnical.
-# the DataBaseInterface Class does not currently support Cal
-# class Cal(Base):
-#    __tablename__ = 'cal'
-#    calnum = Column(Integer, primary_key=True)
-#    # obsnum = Column(BigInteger, ForeignKey('observation.obsnum'))
-#    obsnum = Column(String(100), ForeignKey('observation.obsnum'))
-#    last_activity = Column(DateTime, nullable=False, default=func.current_timestamp())
-#    cal_date = Column(DateTime)
-#    calfile = Column(Text)
-#    output_dir = Column(Text)
-#    input_file = Column(Text)
-#    logtext = Column(Text)
-#    observation = relationship(Observation, backref=backref('cals', uselist=True), cascade="all, delete-orphan", single_parent=True)
-
-
 class Still(Base):
     __tablename__ = 'still'
     hostname = Column(String(100), primary_key=True)
     ip_addr = Column(String(50))
     port = Column(BigInteger)
+    data_dir = Column(String(200))
     last_checkin = Column(DateTime, server_default=func.now(), onupdate=func.current_timestamp())
     status = Column(String(100))
     current_load = Column(Integer)
@@ -302,6 +286,7 @@ class DataBaseInterface(object):
         s.add(LOG)
         s.commit()
         s.close()
+
         return None
 
     def get_logs(self, obsnum, good_only=True):
@@ -461,7 +446,6 @@ class DataBaseInterface(object):
         s.close()
         return (low, high)
 
-    # todo this functions
     def get_obs_still_host(self, obsnum):
         """
         input: obsnum
@@ -568,24 +552,33 @@ class DataBaseInterface(object):
         """
         OBS = self.get_obs(obsnum)
         status = OBS.status
+
         return status
 
     def get_available_stills(self):
+        ###
+        # get_available_stills : Retrun all stills that have checked in within the past 3min and have status of "OK"
+        ###
         since = datetime.datetime.now() - datetime.timedelta(minutes=3)
         s = self.Session()
-
-        stills = s.query(Still).filter(Still.last_checkin > since)
-
+        stills = s.query(Still).filter(Still.last_checkin > since, Still.status == "OK")
         s.close()
         return stills
 
     def get_still_info(self, hostname):
+        ###
+        # get_still_info : Return all the information of a still given its hostname
+        ###
         s = self.Session()
         still = s.query(Still).filter(Still.hostname == hostname).first()
         s.close()
         return still
 
-    def still_checkin(self, hostname, ip_addr, port, load, status="OK"):
+    def still_checkin(self, hostname, ip_addr, port, load, data_dir, status="OK"):
+        ###
+        # still_checkin : Check to see if the still entry already exists in the database, if it does update the timestamp, port, data_dir, and load.
+        #                 If does not exist then go ahead and create an entry.
+        ###
         s = self.Session()
 
         if s.query(Still).filter(Still.hostname == hostname).count() > 0:  # Check if the still already exists, if so just update the time
@@ -593,9 +586,11 @@ class DataBaseInterface(object):
             still.last_checkin = datetime.datetime.now()
             still.status = status
             still.current_load = load
+            still.data_dir = data_dir
+            still.port = port
             s.add(still)
         else:  # Still doesn't exist, lets add it
-            still = Still(hostname=hostname, ip_addr=ip_addr, port=port, current_load=load, status=status)
+            still = Still(hostname=hostname, ip_addr=ip_addr, port=port, current_load=load, data_dir=data_dir, status=status)
             s.add(still)
 
         s.commit()
@@ -603,6 +598,9 @@ class DataBaseInterface(object):
         return 0
 
     def get_most_available_still(self):
+        ###
+        # get_most_available_still : Grab the still with the least load that has checked in within the past 3min and has status OK and load under 80%
+        ###
         s = self.Session()
         since = datetime.datetime.now() - datetime.timedelta(minutes=3)
         still = s.query(Still).filter(Still.last_checkin > since, Still.status == "OK", Still.current_load < 80).order_by(Still.current_load).first()
@@ -610,18 +608,20 @@ class DataBaseInterface(object):
 
         return still
 
-        # def get_neighbors(self,obsnum):
-#        """
-#        for now lets search for neighbors based on time
-#        formally, look for observations within 1.2 of the length of the input
-#
-#        return: list of obsnums. Always len=2.  None indicates no neighbor
-#        """
-#        s = self.Session()
-#        OBS = s.query(Observation).filter(Observation.obsnum==obsnum).one()
-#        NEIGHBORS = s.query(Observation).filter(
-#                        func.abs(Observation.julian_date-OBS.julian_date)<(1.2*OBS.length),Observation.obsnum!=OBS.obsnum,Observation.pol==OBS.pol)
-#        neighborobsnums = [o.obsnum for o in NEIGHBORS]
-#        while len(neighborobsnums)<2:
-#            neighborobsnums.append(None)
-#        return neighborobsnums
+    def get_all_neighbors(self, obsnum):
+        ###
+        # get_all_neighbors: Go down (and up) the rabbit hole and find ALL the neighbors of a particular obsid
+        ###
+        neighbor_obs_nums = []
+        neighbor_obs_nums.append(obsnum)  # Go ahead and add the current obsid to the list
+
+        low_obs, high_obs = self.get_neighbors(obsnum)
+        while high_obs is not None:  # Traverse the list UP to find all neighbors above this one
+            neighbor_obs_nums.append(high_obs)
+            high_obs = self.get_neighbors(high_obs)[1]
+
+        while low_obs is not None:  # Traverse the list DOWN to find all neighbors above this one
+            neighbor_obs_nums.append(low_obs)
+            low_obs = self.get_neighbors(low_obs)[0]
+
+        return neighbor_obs_nums

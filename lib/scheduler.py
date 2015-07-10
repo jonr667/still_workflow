@@ -43,14 +43,13 @@ class Action:
         still:still action will run on.'''
         self.obs = obs
         self.task = task
-        self.is_transfer = False  # = (task == 'POT_TO_USA')  # XXX don't like hardcoded value here HARDWF JON: commented out POT_TO_USA part, I don't think its used anymore
+        self.is_transfer = False
         self.neighbor_status = neighbor_status
         self.still = still  # PD
         self.priority = 0
         self.launch_time = -1
         self.timeout = timeout
         self.wf = workflow
-        # self.task_client = task_clients[still]  # PD
         self.task_client = task_client
 
     def set_priority(self, p):
@@ -102,9 +101,12 @@ class Action:
         logger.debug("curtime %s, launch_time : %s, timeout : %s" % (curtime, self.launch_time, self.timeout))
         return curtime > self.launch_time + self.timeout
 
-    def run_remote_task(self):
-        logger.debug('Action: task_client(%s,%s)' % (self.task, self.obs))
-        self.task_client.transmit(self.task, self.obs)
+    def run_remote_task(self, task=""):
+        if task == "":
+            task = self.task
+
+        logger.debug('Action: task_client(%s,%s)' % (task, self.obs))
+        self.task_client.transmit(task, self.obs)
 
 
 class Scheduler:
@@ -112,17 +114,22 @@ class Scheduler:
     taken, and then schedules them on stills according to priority.'''
 
     # to make instantiating the object little nicer
-    def __init__(self, task_clients, workflow, dbi='', nstills=4, actions_per_still=8, transfers_per_still=2, blocksize=10, timeout=3600., sleep=10):  # PD
-        '''nstills:           # of stills in system,
-           actions_per_still: # of actions that can be scheduled simultaneously per still.'''
-        self.nstills = nstills  # preauto
-        self.actions_per_still = actions_per_still
-        self.transfers_per_still = transfers_per_still  # Jon : Not overly sure on this one
-        self.blocksize = blocksize  # preauto
+    # def __init__(self, task_clients, workflow, dbi='', nstills=4, actions_per_still=8, transfers_per_still=2, blocksize=10, timeout=3600., sleep=10):  # PD
+
+    def __init__(self, task_clients, workflow, sg):  # PD
+        self.sg = sg  # Might as well have it around in case I find I need something from it...  Its just a little memory
+        self.nstills = len(sg.hosts)  # preauto
+        self.actions_per_still = sg.actions_per_still
+        self.transfers_per_still = sg.transfers_per_still  # Jon : Not overly sure on this one
+        self.block_size = sg.block_size  # preauto
+        self.timeout = sg.timeout
+        self.sleep_time = sg.sleep_time
+
+        self.lock_all_neighbors_to_same_still = workflow.lock_all_neighbors_to_same_still
         self.active_obs = []
         self._active_obs_dict = {}
         self.action_queue = []
-        self.dbi = dbi
+        self.dbi = sg.dbi
         self.launched_actions = {}  # XPD
 #        for still in xrange(nstills):  # preauto
 #            self.launched_actions[still] = []  # preauto
@@ -139,17 +146,17 @@ class Scheduler:
             self.auto = 0
             self.task_clients = task_clients
 
-        self.timeout = timeout
-        self.sleep = sleep
-
     def find_all_stills(self):
+        ###
+        # find_all_stills : Check the database for all available stills with status OK
+        ###
         print("looking for stills...")
         stills = self.dbi.get_available_stills()
 
         while stills.count() < 1:
             print("Can't find any stills! Waiting for 10sec and trying again")
             time.sleep(10)
-            stills = self.dbi.get_available_stills(self.wf.name)
+            stills = self.dbi.get_available_stills()
 
         for still in stills:
             print(still.hostname)
@@ -210,7 +217,7 @@ class Scheduler:
 #            if window.getch() == 'q':
 #                self.quit()
 
-            time.sleep(self.sleep)
+            time.sleep(self.sleep_time)
 
     def pop_action_queue(self, still, tx=False):
         '''Return highest priority action for the given still.'''
@@ -230,8 +237,8 @@ class Scheduler:
         a.launch()
 
     def kill_action(self, a):
-        '''Subclass this to actually kill the process.'''
         logger.info('Scheduler.kill_action: called on (%s,%s)' % (a.task, a.obs))
+        a.run_remote_task(task="STILL_KILL_OBS")
 
     def clean_completed_actions(self, dbi):
         '''Check launched actions for completion, timeout or fail'''
@@ -249,10 +256,12 @@ class Scheduler:
                     # Jon: Going to use this space to lock a task to a specific server instead of the taskserver
                     # this should keep the taskserver more generic to eventually accomidate multiple workflows simultaniously
 
+                    # Taking this part out for now so that we IMMEDIATLY lock onto a still for an obsnum and ALL of its neighbors (same still)
+                    # might want to think about this later or have it as a config option
                     # not adding to updated_actions removes this from list of launched actions
-                    if status == self.wf.still_locked_after:  # on first copy of data to still, record in db that obs is assigned here
-                        dbi.set_obs_still_host(a.obs, a.still)
-                        # dbi.set_obs_still_path(a.obs, os.path.abspath(self.cwd))  # Jon: Not sure how to get this over yet *FIXME*
+                    # if status == self.wf.still_locked_after:  # on first copy of data to still, record in db that obs is assigned here
+                    #    dbi.set_obs_still_host(a.obs, a.still)
+                    #  # dbi.set_obs_still_path(a.obs, os.path.abspath(self.cwd))  # Jon: Not sure how to get this over yet *FIXME*
                 elif a.timed_out():
                     logger.info('Task %s for obs %s on still %s TIMED OUT.' % (a.task, a.obs, still))
                     self.kill_action(a)
@@ -316,42 +325,43 @@ class Scheduler:
 
         return
 
-    def get_action(self, dbi, obs, ActionClass=None, action_args=()):
+    def get_action(self, dbi, obsnum, ActionClass=None, action_args=()):
         '''Find the next actionable step for obs f (one for which all
         prerequisites have been met.  Return None if no action is available.
         This function is allowed to return actions that have already been
         launched.
         ActionClass: a subclass of Action, for customizing actions.
             None defaults to the standard Action'''
-        status = dbi.get_obs_status(obs)
-        print("Obsid : %s    Status %s") % (obs, status)
+        status = dbi.get_obs_status(obsnum)
+        print("Obsid : %s    Status %s") % (obsnum, status)
+
         if status == 'COMPLETE':  # Jon: May be worth adding some code here to make sure to pop this observation out of the queue so we don't keep hitting it
-            print("COMPLETE for obsid : %s") % obs
+            print("COMPLETE for obsid : %s") % obsnum
             return None  # obs is complete
-        neighbors = dbi.get_neighbors(obs)
-        print("Neighbors for obs %s : ") % obs
-        print("The neighbors : ", neighbors)
+
+        neighbors = dbi.get_neighbors(obsnum)
 
         if None in neighbors:  # is this an end-file that can't be processed past UVCR?
-            # next_step = ENDFILE_PROCESSING_LINKS[status]
-            print("Status : %s") % status
             cur_step_index = self.wf.workflow_actions_endfile.index(status)
             next_step = self.wf.workflow_actions_endfile[cur_step_index + 1]
+
         else:  # this is a normal file
-            # next_step = FILE_PROCESSING_LINKS[status]
             cur_step_index = self.wf.workflow_actions.index(status)
             next_step = self.wf.workflow_actions[cur_step_index + 1]
 
         neighbor_status = [dbi.get_obs_status(n) for n in neighbors if n is not None]
-        # Jon : just for some info on neighbors, remove later
-        print("Neighbor Status : ") % neighbor_status
 
-        still = self.obs_to_still(obs)  # Get a still for a new obsid if one doesn't already exist, TODO: CHECK NEIGHBORS!
+        still = self.obs_to_still(obsnum)  # Get a still for a new obsid if one doesn't already exist, TODO: CHECK NEIGHBORS!
+
+        if self.lock_all_neighbors_to_same_still == 1:
+            for neighbor in self.dbi.get_all_neighbors(obsnum):
+                dbi.set_obs_still_host(neighbor, still)
+
         if still != 0:  # If the obsnum is assigned to a server that doesn't exist at the moment we need to skip it, maybe reassign later
             if ActionClass is None:
                 ActionClass = Action
 
-            a = ActionClass(obs, next_step, neighbor_status, self.task_clients[still], self.wf, still, timeout=self.timeout)  # XPD
+            a = ActionClass(obsnum, next_step, neighbor_status, self.task_clients[still], self.wf, still, timeout=self.timeout)  # XPD
 
             if self.wf.neighbors == 1:
                 if a.has_prerequisites():
@@ -367,6 +377,7 @@ class Scheduler:
         return jdcnt * 4 + pol  # prioritize first by time, then by pol
         # XXX might want to prioritize finishing a obs already started before
         # moving to the latest one (at least, up to a point) to avoid a
+
         # build up of partial obs.  But if you prioritize obs already
         # started too excessively, then the queue could eventually fill with
         # partially completed tasks that are failing for some reason
@@ -376,6 +387,7 @@ class Scheduler:
         #   Check if a obsid has a still already, if it does simply return it.  If it does not then lets find the lowest
         #   loaded (cpu) one and assign it.  If none are under 80% then lets just wait around, they're busy enough as is.
         ##############
+
         mystill = self.dbi.get_obs_still_host(obs)
         if mystill:
             if mystill in self.task_clients:
@@ -385,7 +397,7 @@ class Scheduler:
                 return 0
 
         else:
-            self.find_all_stills()  # Update stills to make sure we have them all loaded
+
             still = self.dbi.get_most_available_still()
             while not still:
 

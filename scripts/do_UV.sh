@@ -1,5 +1,5 @@
 #!/bin/bash
 
 echo "$@"
-sleep 60
+sleep 240
 exit 0

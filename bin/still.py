@@ -61,7 +61,8 @@ class SpawnerClass:
         self.timeout = 3600
         self.sleep_time = 10
         self.block_size = 10
-        self.window = ''
+        self.lock_all_neighbors_to_same_still = 0
+        self.transfers_per_still = 2
 
 
 class StillScheduler(Scheduler):
@@ -151,6 +152,7 @@ def process_client_config_file(sg, wf):
         wf.prioritize_obs = int(get_config_entry(config, 'WorkFlow', 'prioritize_obs', reqd=False, remove_spaces=True, default_val=0))
         wf.still_locked_after = get_config_entry(config, 'WorkFlow', 'still_locked_after', reqd=False, remove_spaces=True)
         wf.neighbors = int(get_config_entry(config, 'WorkFlow', 'neighbors', reqd=False, remove_spaces=False, default_val=0))
+        wf.lock_all_neighbors_to_same_still = int(get_config_entry(config, 'WorkFlow', 'lock_all_neighbors_to_same_still', reqd=False, remove_spaces=False, default_val=0))
 
         for action in wf.workflow_actions or wf.workflow_actions_endfile:  # Collect all the prereqs and arg strings for any action of the workflow and throw them into a dict of keys and lists
             wf.action_args[action] = '[\'%s:%s/%s\' % (pot, path, basename)]'  # Put in a default host:path/filename for each actions arguements that get passed to do_ scripts
@@ -192,19 +194,28 @@ def start_client(sg, wf, args):
         sys.exit(1)
 
     task_clients = [TaskClient(sg.dbi, s, wf, port=sg.port) for s in sg.hosts]
-    myscheduler = StillScheduler(task_clients, wf, dbi=sg.dbi, actions_per_still=sg.actions_per_still, blocksize=sg.block_size, nstills=len(sg.hosts), timeout=sg.timeout, sleep=sg.sleep_time)  # Init scheduler daemon
-
+    # myscheduler = StillScheduler(task_clients, wf, dbi=sg.dbi, actions_per_still=sg.actions_per_still, blocksize=sg.block_size, nstills=len(sg.hosts), timeout=sg.timeout, sleep=sg.sleep_time)  # Init scheduler daemon
+    # Screw it going to just break a bunch of the unittest stuff and simplify the calling of the scheduler to take SpawnerClass
+    myscheduler = StillScheduler(task_clients, wf, sg)  # Init scheduler daemon
     myscheduler.start(dbi=sg.dbi, ActionClass=Action)
 
     return 0
 
 
-def start_server(sg, wf):
+def start_server(sg, wf, args):
     #
     # Instantiate a still server instance
     #
+    if args.data_dir:
+        mydata_dir = args.data_dir
+    else:
+        mydata_dir = sg.data_dir
+    if args.port:
+        my_port = int(args.port)
+    else:
+        my_port = sg.port
 
-    task_server = TaskServer(sg.dbi, data_dir=sg.data_dir, port=sg.port)
+    task_server = TaskServer(sg.dbi, data_dir=mydata_dir, port=my_port)
     task_server.start()
     return
 
@@ -224,7 +235,11 @@ def main():
     parser.add_argument('--client', dest='client', action='store_true',
                         help='Start a Still Task Client')
     parser.add_argument('--config_file', dest='config_file', required=False,
-                        help="Specify the complete path to the config file")
+                        help="Specify the complete path to the config file, by default we'll use etc/still.cfg")
+    parser.add_argument('--data_dir', dest='data_dir', required=False,
+                        help="For use with --server only, specifies a data_dir for still server, *overrides value in config file*")
+    parser.add_argument('-p', dest='port', required=False,
+                        help="For use with --server only, specifies a port for still server, *overrides value in config file*")
 
     parser.set_defaults(config_file="%setc/still.cfg" % basedir)
 
@@ -239,7 +254,7 @@ def main():
     if args.client is True:
         start_client(sg, workflow_objects, args)
     elif args.server is True:
-        start_server(sg, workflow_objects)
+        start_server(sg, workflow_objects, args)
     else:
         print("You must specify to start this as a client or server (--client or --server)")
 
