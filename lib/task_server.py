@@ -13,9 +13,19 @@ import sys
 import psutil
 
 # from still_shared import logger
+HOSTNAME = socket.gethostname()
 
+
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('taskserver')
 logger.setLevel(logging.DEBUG)
+fh = logging.FileHandler("%s_ts.log" % HOSTNAME)
+fh.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+logger.addHandler(ch)
+logger.addHandler(fh)
+
 logger.propagate = True
 PKT_LINE_LEN = 160
 STILL_PORT = 14204
