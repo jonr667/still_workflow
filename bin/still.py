@@ -9,7 +9,7 @@ import sys
 basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
 sys.path.append(basedir + 'lib')
 
-import add_observations
+# import add_observations
 
 # from dbi import DataBaseInterface
 # from dbi import Observation
@@ -164,7 +164,7 @@ def process_client_config_file(sg, wf):
             if action in config_sections:
 
                 wf.action_prereqs[action] = get_config_entry(config, action, 'prereqs', reqd=False, remove_spaces=True).split(",")
-                wf.action_args[action] = get_config_entry(config, action, 'args', reqd=False, remove_spaces=True)
+                wf.action_args[action] = get_config_entry(config, action, 'args', reqd=False, remove_spaces=False)
     else:
         print("Config file does not appear to exist : %s") % sg.config_file
         sys.exit(1)

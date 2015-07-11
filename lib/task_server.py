@@ -197,9 +197,13 @@ class TaskClient:
         pot, path, basename = self.dbi.get_input_file(obs)  # Jon: Pot I believe is host where file to process is, basename is just the file name
         outhost, outpath = self.dbi.get_output_location(obs)
         # hosts and paths are not used except for ACQUIRE_NEIGHBORS and CLEAN_NEIGHBORS
-        stillhost, stillpath = self.dbi.get_obs_still_host(obs), self.dbi.get_obs_still_path(obs)
-        neighbors = [(self.dbi.get_obs_still_host(n), self.dbi.get_obs_still_path(n)) + self.dbi.get_input_file(n)
+        # stillhost, stillpath = self.dbi.get_obs_still_host(obs), self.dbi.get_obs_still_path(obs)
+        stillhost, stillpath = self.dbi.get_obs_still_host(obs), self.dbi.get_still_info(self.host_port[0]).data_dir
+        print("My Still Path: %s") % stillpath
+        neighbors = [(self.dbi.get_obs_still_host(n), self.dbi.get_still_info(self.host_port[0]).data_dir) + self.dbi.get_input_file(n)
                      for n in self.dbi.get_neighbors(obs) if n is not None]
+        print("neighbors var")
+        print(neighbors)
         neighbors_base = list(self.dbi.get_neighbors(obs))
         if not neighbors_base[0] is None:
             neighbors_base[0] = self.dbi.get_input_file(neighbors_base[0])[-1]

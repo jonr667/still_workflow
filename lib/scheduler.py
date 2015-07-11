@@ -226,14 +226,14 @@ class Scheduler:
         neighbor_obs_nums = []
         neighbor_obs_nums.append(obsnum)  # Go ahead and add the current obsid to the list
 
-        low_obs, high_obs = self.get_neighbors(obsnum)
+        low_obs, high_obs = self.dbi.get_neighbors(obsnum)
         while high_obs is not None:  # Traverse the list UP to find all neighbors above this one
             neighbor_obs_nums.append(high_obs)
-            high_obs = self.get_neighbors(high_obs)[1]
+            high_obs = self.dbi.get_neighbors(high_obs)[1]
 
         while low_obs is not None:  # Traverse the list DOWN to find all neighbors above this one
             neighbor_obs_nums.append(low_obs)
-            low_obs = self.get_neighbors(low_obs)[0]
+            low_obs = self.dbi.get_neighbors(low_obs)[0]
 
         return neighbor_obs_nums
 

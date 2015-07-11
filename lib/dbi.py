@@ -1,13 +1,13 @@
 import os
 import sys
 import logging
-import hashlib
+# import hashlib
 import datetime
 
-from subprocess import Popen, PIPE
+# from subprocess import Popen, PIPE
 
-from sqlalchemy import Table, Column, String, Integer, ForeignKey, TIMESTAMP
-from sqlalchemy import Float, func, DateTime, Enum, BigInteger, Numeric, Text
+from sqlalchemy import Table, Column, String, Integer, ForeignKey
+from sqlalchemy import Float, func, DateTime, BigInteger, Text
 from sqlalchemy.orm import relationship, backref, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import create_engine
