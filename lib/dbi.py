@@ -32,6 +32,7 @@ logger.setLevel(logging.DEBUG)
 
 
 def jdpol2obsnum(jd, pol, djd):
+    # Jon : I think at some point I want to move this function to a paper specific file
     """
     input: julian date float, pol string. and length of obs in fraction of julian date
     output: a unique index
@@ -44,14 +45,14 @@ def jdpol2obsnum(jd, pol, djd):
     return int(obsint + polnum * (2 ** 32))
 
 
-def updateobsnum(context):
-    """
-    helper function for Observation sqlalchemy object.
-    used to calculate the obsnum on creation of the record
-    """
-    return jdpol2obsnum(context.current_parameters['date'],
-                        context.current_parameters['pol'],
-                        context.current_parameters['length'])
+# def updateobsnum(context):
+#    """
+#    helper function for Observation sqlalchemy object.
+#    used to calculate the obsnum on creation of the record
+#    """
+#    return jdpol2obsnum(context.current_parameters['date'],
+#                        context.current_parameters['pol'],
+#                        context.current_parameters['length'])
 
 
 #############
