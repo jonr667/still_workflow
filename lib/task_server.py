@@ -88,7 +88,9 @@ class Task:
             process = psutil.Popen(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args, cwd=self.cwd, stderr=self.OUTFILE, stdout=self.OUTFILE)
             if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
                 process.cpu_affinity(range(psutil.cpu_count()))
+            self.dbi.update_obs_current_stage(self.obs, self.task)
             self.dbi.add_log(self.obs, self.task, ' '.join(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args + ['\n']), None)
+
         except Exception, e:
             logger.error('Task._run: (%s,%s) %s error="%s"' % (self.task, self.obs, ' '.join(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args), e))
 #            sys.exit(1)
@@ -138,7 +140,7 @@ class Task:
 
         for child in self.process.children(recursive=True):
             child.kill()
-
+        self.dbi.update_obs_current_stage(self.obs, "KILLED")
         self.process.kill()
         os.wait()
 
@@ -147,6 +149,7 @@ class Task:
 
     def record_failure(self):
         self.dbi.set_obs_pid(self.obs, -9)
+        self.dbi.update_obs_current_stage(self.obs, "FAILED")
         logger.error('Task.record_failure.  TASK FAIL ({task},{obsnum})'.format(task=self.task, obsnum=self.obs))
 
     def record_completion(self):

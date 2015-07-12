@@ -86,6 +86,8 @@ class Observation(Base):
     stillpath = Column(String(200))
     outputpath = Column(String(200))
     outputhost = Column(String(100))
+    current_stage_in_progress = Column(String(200))
+    current_stage_start_time = Column(DateTime)
     high_neighbors = relationship("Observation",
                                   secondary=neighbors,
                                   primaryjoin=obsnum == neighbors.c.low_neighbor_id,
@@ -588,3 +590,20 @@ class DataBaseInterface(object):
         still = s.query(Still).filter(Still.last_checkin > since, Still.status == "OK", Still.current_load < 80).order_by(Still.current_load).first()
         s.close()
         return still
+
+    def get_obs_assigned_to_still(self, still_hostname):
+        s = self.Session()
+        observations = s.query(Observation).filter(Observation.stillhost == still_hostname)
+        s.close()
+        return observations
+
+    def update_obs_current_stage(self, obsnum, current_stage_in_progress):
+        s = self.Session()
+        obs = s.query(Observation).filter(Observation.obsnum == str(obsnum)).one()
+
+        obs.current_stage_in_progress = current_stage_in_progress
+        obs.current_stage_start_time = datetime.datetime.now()
+        print("Trying to update obs: %s stage : %s  time : %s") % (obs.obsnum, obs.current_stage_in_progress, obs.current_stage_start_time)
+        s.add(obs)
+        s.commit()
+        s.close()
