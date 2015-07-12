@@ -118,6 +118,11 @@ while(1):
     c = stdscr.getch()
     if c == ord('q'):
         s.close()
+        curses.nocbreak()
+        stdscr.keypad(0)
+        curses.echo()
+        curses.endwin()
+
         sys.exit(0)
     s.close()
     time.sleep(5)
