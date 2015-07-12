@@ -15,16 +15,20 @@ import psutil
 # from still_shared import logger
 HOSTNAME = socket.gethostname()
 
-
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('taskserver')
+formating = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger.setLevel(logging.DEBUG)
+
+ch = logging.StreamHandler()
+ch.setLevel(logging.ERROR)
+ch.setFormatter(formating)
+
 fh = logging.FileHandler("%s_ts.log" % HOSTNAME)
 fh.setLevel(logging.DEBUG)
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-logger.addHandler(ch)
+fh.setFormatter(formating)
+
 logger.addHandler(fh)
+logger.addHandler(ch)
 
 logger.propagate = True
 PKT_LINE_LEN = 160
@@ -79,7 +83,6 @@ class Task:
 
     def _run(self):
         process = None
-        print("PATh to do scripts : %s") % self.path_to_do_scripts
         logger.info('Task._run: (%s, %s) %s cwd=%s' % (self.task, self.obs, ' '.join(['do_%s.sh' % self.task] + self.args), self.cwd))
         # create a temp file descriptor for stdout and stderr
         self.OUTFILE = tempfile.TemporaryFile()
@@ -172,7 +175,7 @@ class TaskClient:
         logger.debug('TaskClient.transmit: sending (%s,%s) with args=%s' % (task, obs, ' '.join(args)))
 
         pkt = to_pkt(task, obs, self.host_port[0], args)
-        print(self.host_port)
+        # print(self.host_port)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(5)
         try:  # Attempt to open a socket to a server and send over task instructions
@@ -252,9 +255,6 @@ class TaskHandler(SocketServer.StreamRequestHandler):
         self.data = self.rfile.readline().strip()
         self.wfile.write("OK\n")
 
-        print "{} wrote:".format(self.client_address[0])
-        print self.data
-
         task, obsnum, still, args = self.get_pkt()
         logger.info('TaskHandler.handle: received (%s,%s) with args=%s' % (task, obsnum, ' '.join(args)))
         if task == "STILL_KILL_OBS":  # We should only be killing a process...
@@ -268,7 +268,7 @@ class TaskHandler(SocketServer.StreamRequestHandler):
         else:
             print("Existing Tasks: ")
             for i in self.server.active_tasks:
-                print ("    Active Task: %s, For Obs: %s") % (i.task, i.obs)
+                print("    Active Task: %s, For Obs: %s") % (i.task, i.obs)
                 if i.task == task and i.obs == obsnum:  # We now check to see if the task is already in the list before we go crazy and try to run a second copy
                     logger.debug("We are currently running this task already. Task: %s , Obs: %s" % (i.task, i.obs))
                     task_already_exists = True

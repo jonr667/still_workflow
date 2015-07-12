@@ -150,7 +150,7 @@ class DataBaseInterface(object):
             self.createdb()
         elif dbtype == 'postgresql':
             try:
-                self.engine = create_engine('postgresql+psycopg2://{0}:{1}@{2}:{3}/{4}'.format(dbuser, dbpasswd, dbhost, dbport, dbname), echo=False)  # Set echo=True to Enable debug mode
+                self.engine = create_engine('postgresql+psycopg2://{0}:{1}@{2}:{3}/{4}'.format(dbuser, dbpasswd, dbhost, dbport, dbname), echo=False, pool_size=20, max_overflow=100)  # Set echo=True to Enable debug mode
             except:
                 print("Could not connect to the postgresql database.")
                 sys.exit(1)
@@ -172,6 +172,7 @@ class DataBaseInterface(object):
         s = self.Session()
         count = s.query(Observation).count()
         print("found %i records" % (count))
+        s.close()
         return (len(tables) == 3)
 
     def list_observations(self):
@@ -507,6 +508,7 @@ class DataBaseInterface(object):
         host = POTFILE.host
         path = os.path.dirname(POTFILE.filename)
         file = os.path.basename(POTFILE.filename)
+        s.close()
         return host, path, file
 
     def get_output_location(self, obsnum):

@@ -14,16 +14,20 @@ from task_server import TaskClient
 # basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
 # sys.path.append(basedir + 'bin')
 
-
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('scheduler')
+formating = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger.setLevel(logging.DEBUG)
-fh = logging.FileHandler('scheduler.log')
-fh.setLevel(logging.DEBUG)
+
 ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-logger.addHandler(ch)
+ch.setLevel(logging.ERROR)
+ch.setFormatter(formating)
+
+fh = logging.FileHandler("scheduler.log")
+fh.setLevel(logging.DEBUG)
+fh.setFormatter(formating)
+
 logger.addHandler(fh)
+logger.addHandler(ch)
 
 MAXFAIL = 5  # Jon : move this into config
 TIME_INT_FOR_STILL_CHECK = 100
@@ -150,11 +154,11 @@ class Scheduler:
         ###
         # find_all_stills : Check the database for all available stills with status OK
         ###
-        print("looking for stills...")
+        logger.debug("looking for stills...")
         stills = self.dbi.get_available_stills()
 
         while stills.count() < 1:
-            print("Can't find any stills! Waiting for 10sec and trying again")
+            logger.debug("Can't find any stills! Waiting for 10sec and trying again")
             time.sleep(10)
             stills = self.dbi.get_available_stills()
 

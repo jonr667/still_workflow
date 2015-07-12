@@ -101,11 +101,13 @@ class StillDataBaseInterface(dbi.DataBaseInterface):
             s.close()
         except:
             print("Could not commit observation via add_observation.")
+            s.close()
             exit(1)
 
         # Jon: Not sure I want to add files here yet...
         # self.add_file(obsnum, host, filename)  # todo test.
         # sys.stdout.flush()
+        s.close()
         return obsnum
 
 
