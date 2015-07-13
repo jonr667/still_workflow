@@ -20,10 +20,20 @@ Base = declarative_base()
 
 # Jon : Not sure why the logger is defined here?
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('dbi')
+formating = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger.setLevel(logging.DEBUG)
 
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+ch.setFormatter(formating)
+
+fh = logging.FileHandler("dbi.log")
+fh.setLevel(logging.DEBUG)
+fh.setFormatter(formating)
+
+logger.addHandler(fh)
+logger.addHandler(ch)
 #########
 #
 #   Helper functions
@@ -153,28 +163,23 @@ class DataBaseInterface(object):
             try:
                 self.engine = create_engine('postgresql+psycopg2://{0}:{1}@{2}:{3}/{4}'.format(dbuser, dbpasswd, dbhost, dbport, dbname), echo=False, pool_size=20, max_overflow=100)  # Set echo=True to Enable debug mode
             except:
-                print("Could not connect to the postgresql database.")
+                logger.exception("Could not connect to the postgresql database.")
                 sys.exit(1)
         elif dbtype == 'mysql':
             try:
                 self.engine = create_engine('mysql://{0}:{1}@{2}:{3}/{4}'.format(dbuser, dbpasswd, dbhost, dbport, dbname), pool_size=20, max_overflow=40, echo=False)
             except:
-                print("Could not connect to the mysql database.")
+                logger.exception("Could not connect to the mysql database.")
                 sys.exit(1)
         try:
             self.Session = sessionmaker(bind=self.engine)
         except:
-            print("Could not create database binding, please check database settings")
+            logger.exception("Could not create database binding, please check database settings")
             sys.exit(1)
 
     def test_db(self):
         tables = Base.metadata.tables.keys()
-        print("found %i tables" % len(tables))
-        s = self.Session()
-        count = s.query(Observation).count()
-        print("found %i records" % (count))
-        s.close()
-        return (len(tables) == 3)
+        return (len(tables) == 5)
 
     def list_observations(self):
         s = self.Session()
@@ -200,7 +205,11 @@ class DataBaseInterface(object):
         s = self.Session()
         # todo tests
         try:
-            obsnums = [obs.obsnum for obs in s.query(Observation).filter(Observation.status != 'NEW', Observation.status != 'COMPLETE')]
+            obsnums = [obs.obsnum for obs in s.query(Observation).
+                       filter((Observation.current_stage_in_progress != 'FAILED') | (Observation.current_stage_in_progress.is_(None))).
+                       filter(Observation.status != 'NEW').
+                       filter(Observation.status != 'COMPLETE').all()]
+
         except:
             logger.debug("No open observations found.")
         s.close()
@@ -215,7 +224,7 @@ class DataBaseInterface(object):
         todo:test
         """
         s = self.Session()
-        #print("My obsnum! %s") % obsnum
+        # print("My obsnum! %s") % obsnum
         OBS = s.query(Observation).filter(Observation.obsnum == str(obsnum)).one()
         s.close()
         return OBS
@@ -268,7 +277,7 @@ class DataBaseInterface(object):
                 LOG.logtext = logtext
         if status is not None:
             LOG.status = status
-        print("LOG.exit_status = ", LOG.exit_status)
+        logger.debug("LOG.exit_status : %s " % LOG.exit_status)
         s.add(LOG)
         s.commit()
         s.close()
@@ -502,7 +511,7 @@ class DataBaseInterface(object):
                 # need a better solution for finding original file
                 File.filename.like('%uv')).one()
         except:
-            print("Could not get uv")
+            logger.exception("Could not get input file for OBS: %s " % obsnum)
 
         # Jon : FIX ME!!!!!
         POTFILE = s.query(File).filter(File.observation == OBS).first()
@@ -606,7 +615,7 @@ class DataBaseInterface(object):
 
         obs.current_stage_in_progress = current_stage_in_progress
         obs.current_stage_start_time = datetime.datetime.now()
-        print("Trying to update obs: %s stage : %s  time : %s") % (obs.obsnum, obs.current_stage_in_progress, obs.current_stage_start_time)
+
         s.add(obs)
         s.commit()
         s.close()

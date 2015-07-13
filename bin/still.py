@@ -79,7 +79,7 @@ class StillScheduler(Scheduler):
         # Things like sleeping when nothing to do or loading more obsid's in from ngas
         # and stuff such as that should go here
         #
-        print("Ext_command_hook!")
+        # print("Ext_command_hook!")
         return
 
 
@@ -194,7 +194,9 @@ def start_client(sg, wf, args):
         print("Database has been initialized")
         sys.exit(0)
     try:
-        sg.dbi.test_db()  # Testing the database to make sure we made a connection, its fun..
+        if sg.dbi.test_db() is False:  # Testing the database to make sure we made a connection, its fun..
+            print("Incorrect number of tables read from the database")
+            sys.exit(1)
     except:
         print("We could not run a test on the database and are aborting.  Please check the DB config settings")
         sys.exit(1)

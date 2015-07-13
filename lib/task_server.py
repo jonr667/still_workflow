@@ -20,7 +20,7 @@ formating = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 logger.setLevel(logging.DEBUG)
 
 ch = logging.StreamHandler()
-ch.setLevel(logging.ERROR)
+ch.setLevel(logging.DEBUG)
 ch.setFormatter(formating)
 
 fh = logging.FileHandler("%s_ts.log" % HOSTNAME)
@@ -34,6 +34,7 @@ logger.propagate = True
 PKT_LINE_LEN = 160
 STILL_PORT = 14204
 PLATFORM = platform.system()
+FAIL_ON_ERROR = 0
 
 
 def pad(s, line_len=PKT_LINE_LEN):
@@ -60,7 +61,7 @@ def from_pkt(pkt, line_len=PKT_LINE_LEN):
 
 
 class Task:
-    def __init__(self, task, obs, still, args, dbi, cwd='.', path_to_do_scripts="."):
+    def __init__(self, task, obs, still, args, dbi, TaskServer, cwd='.', path_to_do_scripts="."):
         self.task = task
         self.obs = obs
         self.still = still
@@ -71,6 +72,7 @@ class Task:
         self.OUTFILE = tempfile.TemporaryFile()
         self.outfile_counter = 0
         self.path_to_do_scripts = path_to_do_scripts
+        self.ts = TaskServer
 
     def run(self):
         if self.process is not None:
@@ -94,9 +96,12 @@ class Task:
             self.dbi.update_obs_current_stage(self.obs, self.task)
             self.dbi.add_log(self.obs, self.task, ' '.join(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args + ['\n']), None)
 
-        except Exception, e:
-            logger.error('Task._run: (%s,%s) %s error="%s"' % (self.task, self.obs, ' '.join(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args), e))
-#            sys.exit(1)
+        except Exception:
+            logger.exception('Task._run: (%s,%s) error="%s"' % (self.task, self.obs, ' '.join(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args)))
+            self.record_failure()
+            if FAIL_ON_ERROR == 1:
+                self.ts.shutdown()
+
         return process
 
     def poll(self):
@@ -107,27 +112,16 @@ class Task:
         logtext = self.OUTFILE.read()
         # logger.debug('Task.pol: (%s,%s) found %d log characters' % (self.task,self.obs,len(logtext)))
         if len(logtext) > self.outfile_counter:
-            logger.debug('Task.pol: ({task},{obsnum}) adding {d} log characeters'.format(task=self.task, obsnum=self.obs, d=len(logtext)))
+            # logger.debug('Task.pol: ({task},{obsnum}) adding {d} log characeters'.format(task=self.task, obsnum=self.obs, d=len(logtext)))
+            logger.debug("Output -> Task : %s, Obsnum: %s, Output: %s" % (self.task, self.obs, logtext))
             self.dbi.update_log(self.obs, self.task, logtext=logtext, exit_status=self.process.poll())
             self.outfile_counter += len(logtext)
-            # logger.debug('Task.pol: (%s,%s) setting next log position to %d' % (self.task,self.obs,self.outfile_counter))
-        # logger.debug('Task.pol: (%s,%s) post log addition' % (self.task,self.obs))
         return self.process.poll()
 
     def finalize(self):
         logger.info('Task.finalize waiting: ({task},{obsnum})'.format(task=self.task, obsnum=self.obs))
         self.process.communicate()
-        # try:
-        #    stdout,stderr=self.process.communicate()
-        #    if stderr is None:
-        #        stderr='<no stderr>'
-        #    if stdout is None:
-        #        stdout = '<no stdout>'
-        #    logtext=stdout + stderr
-        # except Exception,e:
-        #        logger.error(e)
-        # logger.info('Task.finalize writing log: ({task},{obsnum})'.format(task=self.task,obsnum=self.obs))
-        # self.dbi.add_log(self.obs,self.task,logtext=logtext,exit_status=self.poll())
+
         logger.debug('Task.finalize closing out log: ({task},{obsnum})'.format(task=self.task, obsnum=self.obs))
         self.dbi.update_log(self.obs, exit_status=self.process.poll())
         if self.poll():
@@ -136,24 +130,28 @@ class Task:
             self.record_completion()
 
     def kill(self):
-        myproc = psutil.Process(pid=self.process.pid)
-        print("My Process pid to kill : %s") % myproc.children(recursive=True)
-        self.record_failure()
-        logger.debug('Task.kill Trying to kill: ({task},{obsnum}) pid={pid}'.format(task=self.task, obsnum=self.obs, pid=self.process.pid))
+        # myproc = psutil.Process(pid=self.process.pid)
+        self.record_failure(failure_type="KILLED")
+        if self.process.pid:
+            logger.debug('Task.kill Trying to kill: ({task},{obsnum}) pid={pid}'.format(task=self.task, obsnum=self.obs, pid=self.process.pid))
 
-        for child in self.process.children(recursive=True):
-            child.kill()
-        self.dbi.update_obs_current_stage(self.obs, "KILLED")
-        self.process.kill()
+            for child in self.process.children(recursive=True):
+                child.kill()
+            self.process.kill()
+
         os.wait()
 
     def record_launch(self):
         self.dbi.set_obs_pid(self.obs, self.process.pid)
 
-    def record_failure(self):
+    def record_failure(self, failure_type="FAILED"):
+        for task in self.ts.active_tasks:
+            if task.obs == self.obs:
+                self.ts.active_tasks.remove(task)  # Remove the killed task from the active task list
+
         self.dbi.set_obs_pid(self.obs, -9)
-        self.dbi.update_obs_current_stage(self.obs, "FAILED")
-        logger.error('Task.record_failure.  TASK FAIL ({task},{obsnum})'.format(task=self.task, obsnum=self.obs))
+        self.dbi.update_obs_current_stage(self.obs, failure_type)
+        logger.error("Task.record_failure: Task: %s, Obsnum: %s, Type: %s" % (self.task, self.obs, failure_type))
 
     def record_completion(self):
         self.dbi.set_obs_status(self.obs, self.task)
@@ -171,28 +169,27 @@ class TaskClient:
         recieved = ''
         status = ''
         args = self.gen_args(task, obs)
-        print("my args : %s") % args
-        logger.debug('TaskClient.transmit: sending (%s,%s) with args=%s' % (task, obs, ' '.join(args)))
+        logger.debug('TaskClient.transmit: sending (%s,%s) with args=%s' % (task, obs, args))
 
         pkt = to_pkt(task, obs, self.host_port[0], args)
         # print(self.host_port)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(5)
         try:  # Attempt to open a socket to a server and send over task instructions
-            print("connecting to TaskServer %s") % self.host_port[0]
+            logger.debug("connecting to TaskServer %s" % self.host_port[0])
             try:
                 sock.connect(self.host_port)
                 sock.sendall(pkt + "\n")
                 recieved = sock.recv(1024)
             except socket.error, exc:
-                logger.info("Caught exection trying to contact : %s socket.error : %s" % (self.host_port[0], exc))
+                logger.exception("Caught exection trying to contact : %s socket.error : %s" % (self.host_port[0], exc))
         finally:
             sock.close()
 
         if recieved != "OK\n":  # Check if we did not recieve an OK that the server accepted the task
-            print("!! We had a problem sending data to %s") % self.host_port[0]
+            logger.debug("!! We had a problem sending data to %s" % self.host_port[0])
             self.error_count += 1
-            print("Host : %s  has error count :%s") % (self.host_port[0], self.error_count)
+            logger.debug("Host : %s  has error count :%s" % (self.host_port[0], self.error_count))
             status = "FAILED_TO_CONNECT"
         else:
             status = "OK"
@@ -205,11 +202,10 @@ class TaskClient:
         # hosts and paths are not used except for ACQUIRE_NEIGHBORS and CLEAN_NEIGHBORS
         # stillhost, stillpath = self.dbi.get_obs_still_host(obs), self.dbi.get_obs_still_path(obs)
         stillhost, stillpath = self.dbi.get_obs_still_host(obs), self.dbi.get_still_info(self.host_port[0]).data_dir
-        print("My Still Path: %s") % stillpath
+
         neighbors = [(self.dbi.get_obs_still_host(n), self.dbi.get_still_info(self.host_port[0]).data_dir) + self.dbi.get_input_file(n)
                      for n in self.dbi.get_neighbors(obs) if n is not None]
-        print("neighbors var")
-        print(neighbors)
+
         neighbors_base = list(self.dbi.get_neighbors(obs))
         if not neighbors_base[0] is None:
             neighbors_base[0] = self.dbi.get_input_file(neighbors_base[0])[-1]
@@ -230,8 +226,7 @@ class TaskClient:
             try:
                 args = eval(self.wf.action_args[task])
             except:
-                print("Could not process arguments for task %s please check args for this task in config file") % task
-                print(self.wf.action_args)
+                logger.exception("Could not process arguments for task %s please check args for this task in config file, ARGS: %s" % (task, self.wf.action_args))
                 sys.exit(1)
         return args
 
@@ -266,16 +261,15 @@ class TaskHandler(SocketServer.StreamRequestHandler):
             self.server.dbi.set_obs_status(obsnum, task)
 
         else:
-            print("Existing Tasks: ")
-            for i in self.server.active_tasks:
-                print("    Active Task: %s, For Obs: %s") % (i.task, i.obs)
-                if i.task == task and i.obs == obsnum:  # We now check to see if the task is already in the list before we go crazy and try to run a second copy
-                    logger.debug("We are currently running this task already. Task: %s , Obs: %s" % (i.task, i.obs))
+            for active_task in self.server.active_tasks:
+                logger.debug("  Active Task: %s, For Obs: %s" % (active_task.task, active_task.obs))
+                if active_task.task == task and active_task.obs == obsnum:  # We now check to see if the task is already in the list before we go crazy and try to run a second copy
+                    logger.debug("We are currently running this task already. Task: %s , Obs: %s" % (active_task.task, active_task.obs))
                     task_already_exists = True
                     break
 
             if task_already_exists is False:
-                t = Task(task, obsnum, still, args, self.server.dbi, self.server.data_dir, self.server.path_to_do_scripts)
+                t = Task(task, obsnum, still, args, self.server.dbi, self.server, self.server.data_dir, self.server.path_to_do_scripts)
                 self.server.append_task(t)
                 t.run()
         return
@@ -294,7 +288,7 @@ class TaskServer(SocketServer.TCPServer):
         self.watchdog_count = 0
         self.port = port
         self.path_to_do_scripts = path_to_do_scripts
-        print("Path to do Scripts (TaskServer) : %s") % self.path_to_do_scripts
+        logger.debug("Path to do_ Scripts : %s" % self.path_to_do_scripts)
         logger.debug("Data_dir : %s" % self.data_dir)
         logger.debug("Port : %s" % self.port)
 
@@ -313,11 +307,13 @@ class TaskServer(SocketServer.TCPServer):
                     try:
                         c = t.process.children()[0]
                         # Check the affinity!
-                        if len(c.cpu_affinity()) < psutil.cpu_count():
-                            c.cpu_affinity(range(psutil.cpu_count()))
-                        logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%%, mem={mem:.1f}%%, Naffinity={aff}'.format(
-                            obsnum=t.obs, task=t.task, pid=c.pid, cpu=c.cpu_percent(interval=1.0), mem=c.memory_percent(), aff=len(c.cpu_affinity())))
+                        if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
+                            if len(c.cpu_affinity()) < psutil.cpu_count():
+                                c.cpu_affinity(range(psutil.cpu_count()))
+                                logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%%, mem={mem:.1f}%%, Naffinity={aff}'.format(
+                                    obsnum=t.obs, task=t.task, pid=c.pid, cpu=c.cpu_percent(interval=1.0), mem=c.memory_percent(), aff=len(c.cpu_affinity())))
                     except:
+                        # logger.exception("Problem getting t.process.childred()[0] or setting affinity")
                         continue
                 else:
                     t.finalize()
@@ -333,11 +329,14 @@ class TaskServer(SocketServer.TCPServer):
                 self.watchdog_count += 1
 
     def kill(self, pid):
-        for task in self.active_tasks:
-            if task.process.pid == pid:
-                task.kill()
-                self.active_tasks.remove(task)  # Remove the killed task from the active task list
-                break
+        try:
+            for task in self.active_tasks:
+                if task.process.pid == pid:
+                    task.kill()
+                    self.active_tasks.remove(task)  # Remove the killed task from the active task list
+                    break
+        except:
+            logger.exception("Problem killing off task: %s  w/  pid : %s" % (task, pid))
 
     def kill_all(self):
         for task in self.active_tasks:
@@ -352,7 +351,6 @@ class TaskServer(SocketServer.TCPServer):
             hostname = socket.gethostname()
             ip_addr = socket.gethostbyname(hostname)
             cpu_usage = psutil.cpu_percent()
-            print("CPU USAGE : %s") % cpu_usage
 
             self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), self.data_dir, status="OK")
             time.sleep(60)
@@ -365,9 +363,9 @@ class TaskServer(SocketServer.TCPServer):
         t = threading.Thread(target=self.finalize_tasks)
         t.daemon = True
         t.start()
-        logger.debug('this is scheduler.py')
+        logger.debug('Starting Task Server')
         logger.debug("using code at: " + __file__)
-        # self.dbi.still_checkin("localhost", "127.0.0.1")
+
         try:
             # Setup a thread that just updates the last checkin time for this still every 5min
             timer_thread = threading.Thread(target=self.checkin_timer)
@@ -380,7 +378,7 @@ class TaskServer(SocketServer.TCPServer):
 #            t.join()
 
     def shutdown(self):
-        print("getting to shutdown!!")
+        logger.debug("Shutting Down task_server")
         hostname = socket.gethostname()
         ip_addr = socket.gethostbyname(hostname)
         cpu_usage = psutil.cpu_percent()
