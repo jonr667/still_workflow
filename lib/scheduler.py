@@ -342,13 +342,11 @@ class Scheduler:
             return None
 
         # logger.debug("Obsid : %s    Status %s" % (obsnum, status))
-
         if status == 'COMPLETE':  # Jon: May be worth adding some code here to make sure to pop this observation out of the queue so we don't keep hitting it
             logger.debug("COMPLETE for obsid : %s" % obsnum)
             return None  # obs is complete
 
         neighbors = self.dbi.get_neighbors(obsnum)
-
         if None in neighbors:  # is this an end-file that can't be processed past UVCR?
             cur_step_index = self.wf.workflow_actions_endfile.index(status)
             next_step = self.wf.workflow_actions_endfile[cur_step_index + 1]
@@ -358,9 +356,7 @@ class Scheduler:
             next_step = self.wf.workflow_actions[cur_step_index + 1]
 
         neighbor_status = [self.dbi.get_obs_status(n) for n in neighbors if n is not None]
-
-        still = self.obs_to_still(obsnum)  # Get a still for a new obsid if one doesn't already exist, TODO: CHECK NEIGHBORS!
-
+        still = self.obs_to_still(obsnum)  # Get a still for a new obsid if one doesn't already exist.
         if self.lock_all_neighbors_to_same_still == 1:
             for neighbor in self.get_all_neighbors(obsnum):
                 self.dbi.set_obs_still_host(neighbor, still)
@@ -370,7 +366,6 @@ class Scheduler:
                 ActionClass = Action
 
             a = ActionClass(obsnum, next_step, neighbor_status, self.task_clients[still], self.wf, still, timeout=self.timeout)
-
             if self.wf.neighbors == 1:
                 if a.has_prerequisites():
                     return a
