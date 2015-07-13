@@ -87,7 +87,7 @@ class StillDataBaseInterface(dbi.DataBaseInterface):
     #
     # Overload DataBaseInterface class from still to be able to modify some functions
     #
-    def add_observation(self, obsnum, date, date_type, pol, filename, host, length=2 / 60. / 24, status=''):
+    def add_observation2(self, obsnum, date, date_type, pol, filename, host, length=2 / 60. / 24, status=''):
         #
         # Overloading the existing class function to get MWA data in, though this might be generic enough to backport
         #

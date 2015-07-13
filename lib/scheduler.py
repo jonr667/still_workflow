@@ -109,8 +109,8 @@ class Action:
             task = self.task
 
         logger.debug('Action: task_client(%s,%s)' % (task, self.obs))
-        self.task_client.transmit(task, self.obs)
-
+        connect_returned = self.task_client.transmit(task, self.obs)
+        return connect_returned
 
 class Scheduler:
     ###
@@ -243,7 +243,12 @@ class Scheduler:
 
     def kill_action(self, a):
         logger.info('Scheduler.kill_action: called on (%s,%s)' % (a.task, a.obs))
-        a.run_remote_task(task="STILL_KILL_OBS")
+        connect_returned = a.run_remote_task(task="STILL_KILL_OBS")
+        if connect_returned == "FAILED_TO_CONNECT":
+            logger.debug("We had an issue connecting to still : %s to kill task: %s for obsnum : %s" % (a.still, a.task, a.obs))
+            return 1
+        else:
+            return 0
 
     def clean_completed_actions(self, dbi):
         '''Check launched actions for completion, timeout or fail'''
