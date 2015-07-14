@@ -94,6 +94,7 @@ class Task:
             process = psutil.Popen(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args, cwd=self.cwd, stderr=self.OUTFILE, stdout=self.OUTFILE)
             if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
                 process.cpu_affinity(range(psutil.cpu_count()))
+            process.set_nice(10)  # Jon : I want to set all the processes evenly so they don't compete against core OS functionality slowing things down.
             self.dbi.update_obs_current_stage(self.obs, self.task)
             self.dbi.add_log(self.obs, self.task, ' '.join(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args + ['\n']), None)
 
@@ -311,10 +312,10 @@ class TaskServer(SocketServer.TCPServer):
                         c = t.process.children()[0]
                         # Check the affinity!
                         if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
+                            logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%%, mem={mem:.1f}%%, Naffinity={aff}'.format(
+                                obsnum=t.obs, task=t.task, pid=c.pid, cpu=c.cpu_percent(interval=1.0), mem=c.memory_percent(), aff=len(c.cpu_affinity())))
                             if len(c.cpu_affinity()) < psutil.cpu_count():
                                 c.cpu_affinity(range(psutil.cpu_count()))
-                                logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%%, mem={mem:.1f}%%, Naffinity={aff}'.format(
-                                    obsnum=t.obs, task=t.task, pid=c.pid, cpu=c.cpu_percent(interval=1.0), mem=c.memory_percent(), aff=len(c.cpu_affinity())))
                     except:
 
                         continue
