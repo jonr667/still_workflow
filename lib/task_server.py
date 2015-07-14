@@ -316,9 +316,10 @@ class TaskServer(SocketServer.TCPServer):
                         c = t.process.children()[0]
                         # Check the affinity!
                         if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
-                            logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%%, mem={mem:.1f}%%, Naffinity={aff}'.format(
-                                obsnum=t.obs, task=t.task, pid=c.pid, cpu=c.cpu_percent(interval=1.0), mem=c.memory_percent(), aff=len(c.cpu_affinity())))
+
                             if len(c.cpu_affinity()) < psutil.cpu_count():
+                                logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%%, mem={mem:.1f}%%, Naffinity={aff}'.format(
+                                    obsnum=t.obs, task=t.task, pid=c.pid, cpu=c.cpu_percent(interval=1.0), mem=c.memory_percent(), aff=len(c.cpu_affinity())))
                                 c.cpu_affinity(range(psutil.cpu_count()))
                     except:
 
@@ -330,8 +331,11 @@ class TaskServer(SocketServer.TCPServer):
 
             #  Jon: I think we can get rid of the watchdog as I'm already throwing this at the db
             time.sleep(poll_interval)
-            if self.watchdog_count == 100:
+            if self.watchdog_count == 50:
                 logger.debug('TaskServer is alive')
+                for t in self.active_tasks:
+                    logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%%, mem={mem:.1f}%%, Naffinity={aff}'.format(
+                        obsnum=t.obs, task=t.task, pid=c.pid, cpu=c.cpu_percent(interval=1.0), mem=c.memory_percent(), aff=len(c.cpu_affinity())))
                 self.watchdog_count = 0
             else:
                 self.watchdog_count += 1
