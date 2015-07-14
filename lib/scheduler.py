@@ -74,17 +74,17 @@ class Action:
         except:
             index2 = None
 
-        logger.debug("has_prerequisites : Task : %s - Index1 : %s" % (self.task, self.wf.workflow_actions[index1]))
-        if index2 is not None:
-            logger.debug("has_prerequisites : Task : %s - Index2 : %s" % (self.task, self.wf.workflow_actions[index2]))
-        logger.debug('Action.has_prerequisites: checking (%s,%s) neighbor_status=%s' % (self.task, self.obs, self.neighbor_status))
+        # logger.debug("has_prerequisites : Task : %s - Index1 : %s" % (self.task, self.wf.workflow_actions[index1]))
+        # if index2 is not None:
+        #     logger.debug("has_prerequisites : Task : %s - Index2 : %s" % (self.task, self.wf.workflow_actions[index2]))
+        # logger.debug('Action.has_prerequisites: checking (%s,%s) neighbor_status=%s' % (self.task, self.obs, self.neighbor_status))
 
         for status_of_neighbor in self.neighbor_status:
             if status_of_neighbor is None:  # indicates that obs hasn't been entered into DB yet
                 return False
-            logger.debug("Neighbor Status: %s" % status_of_neighbor)
+            # logger.debug("Neighbor Status: %s" % status_of_neighbor)
             index_of_neighbor_status = self.wf.workflow_actions.index(status_of_neighbor)
-            logger.debug("Index1: %s, Index of neighbor status : %s" % (index1, index_of_neighbor_status))
+            # logger.debug("Index1: %s, Index of neighbor status : %s" % (index1, index_of_neighbor_status))
             if index1 is not None and index_of_neighbor_status < index1:
                 return False
             if index2 is not None:
@@ -92,7 +92,7 @@ class Action:
             if index2 is not None and index_of_neighbor_status >= index2:
                 return False
             # logger.debug('Action.has_prerequisites: (%s,%s) prerequisites met' % (self.task, self.obs))
-        logger.debug("PreREqs: Going to return true...")
+        # logger.debug("PreREqs: Going to return true...")
         return True
 
     def launch(self, launch_time=None):
