@@ -331,7 +331,7 @@ class TaskServer(SocketServer.TCPServer):
 
             #  Jon: I think we can get rid of the watchdog as I'm already throwing this at the db
             time.sleep(poll_interval)
-            if self.watchdog_count == 50:
+            if self.watchdog_count == 30:
                 logger.debug('TaskServer is alive')
                 for t in self.active_tasks:
                     logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%%, mem={mem:.1f}%%, Naffinity={aff}'.format(
