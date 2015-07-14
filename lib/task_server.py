@@ -85,6 +85,7 @@ class Task:
 
     def _run(self):
         process = None
+
         logger.info('Task._run: (%s, %s) %s cwd=%s' % (self.task, self.obs, ' '.join(['do_%s.sh' % self.task] + self.args), self.cwd))
         # create a temp file descriptor for stdout and stderr
         self.OUTFILE = tempfile.TemporaryFile()
@@ -198,6 +199,7 @@ class TaskClient:
     def gen_args(self, task, obs):
         args = []
         pot, path, basename = self.dbi.get_input_file(obs)  # Jon: Pot I believe is host where file to process is, basename is just the file name
+
         outhost, outpath = self.dbi.get_output_location(obs)
         # hosts and paths are not used except for ACQUIRE_NEIGHBORS and CLEAN_NEIGHBORS
         # stillhost, stillpath = self.dbi.get_obs_still_host(obs), self.dbi.get_obs_still_path(obs)
@@ -227,7 +229,8 @@ class TaskClient:
                 args = eval(self.wf.action_args[task])
             except:
                 logger.exception("Could not process arguments for task %s please check args for this task in config file, ARGS: %s" % (task, self.wf.action_args))
-                sys.exit(1)
+                args = []
+                # sys.exit(1)
         return args
 
     def tx_kill(self, obs):

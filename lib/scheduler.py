@@ -65,29 +65,34 @@ class Action:
         We don't check that the center obs is in the prerequisite state,
         s this action could not have been generated otherwise.'''
 
-        # Jon: I'm leaving this, it only accepting 2 at the moment but it would probably be nice to come back and clean this up
-        # to support however many
-        # index1, index2 = FILE_PROCESSING_PREREQS[self.task]
-
         try:
-            index1, index2 = self.wf.workflow_actions.index(self.wf.action_prereqs[self.task])
+            index1 = self.wf.workflow_actions.index(self.wf.action_prereqs[self.task][0])
         except:
             return True
+        try:
+            index2 = self.wf.workflow_actions.index(self.wf.action_prereqs[self.task][1])
+        except:
+            index2 = None
 
-        logger.debug("has_prerequisites : Task : %s - Index1 : %s - Index2 : %s" % (self.task, self.wf.workflow_actions[index1], self.wf.workflow_actions[index2]))
+        logger.debug("has_prerequisites : Task : %s - Index1 : %s" % (self.task, self.wf.workflow_actions[index1]))
+        if index2 is not None:
+            logger.debug("has_prerequisites : Task : %s - Index2 : %s" % (self.task, self.wf.workflow_actions[index2]))
         logger.debug('Action.has_prerequisites: checking (%s,%s) neighbor_status=%s' % (self.task, self.obs, self.neighbor_status))
 
         for status_of_neighbor in self.neighbor_status:
             if status_of_neighbor is None:  # indicates that obs hasn't been entered into DB yet
                 return False
-
+            logger.debug("Neighbor Status: %s" % status_of_neighbor)
             index_of_neighbor_status = self.wf.workflow_actions.index(status_of_neighbor)
+            logger.debug("Index1: %s, Index of neighbor status : %s" % (index1, index_of_neighbor_status))
             if index1 is not None and index_of_neighbor_status < index1:
                 return False
+            if index2 is not None:
+                logger.debug("Index1: %s, Index of neighbor status : %s" % (index2, index_of_neighbor_status))
             if index2 is not None and index_of_neighbor_status >= index2:
                 return False
             # logger.debug('Action.has_prerequisites: (%s,%s) prerequisites met' % (self.task, self.obs))
-
+        logger.debug("PreREqs: Going to return true...")
         return True
 
     def launch(self, launch_time=None):
@@ -219,7 +224,6 @@ class Scheduler:
         while low_obs is not None:  # Traverse the list DOWN to find all neighbors above this one
             neighbor_obs_nums.append(low_obs)
             low_obs = self.dbi.get_neighbors(low_obs)[0]
-
         return neighbor_obs_nums
 
     def pop_action_queue(self, still, tx=False):
@@ -327,7 +331,7 @@ class Scheduler:
                         myaction.set_priority(self.determine_priority(myaction))
 
                     actions.append(myaction)
-                    logger.debug("Actions - obs: %s : task: %s" % (myaction.obs, myaction.task))
+                    #logger.debug("Actions - obs: %s : task: %s" % (myaction.obs, myaction.task))
 
         actions.sort(action_cmp, reverse=True)  # place most important actions first
         self.action_queue = actions  # completely throw out previous action list
@@ -352,6 +356,7 @@ class Scheduler:
             return None  # obs is complete
 
         neighbors = self.dbi.get_neighbors(obsnum)
+
         if None in neighbors:  # is this an end-file that can't be processed past UVCR?
             cur_step_index = self.wf.workflow_actions_endfile.index(status)
             next_step = self.wf.workflow_actions_endfile[cur_step_index + 1]
@@ -361,10 +366,13 @@ class Scheduler:
             next_step = self.wf.workflow_actions[cur_step_index + 1]
 
         neighbor_status = [self.dbi.get_obs_status(n) for n in neighbors if n is not None]
-        still = self.obs_to_still(obsnum)  # Get a still for a new obsid if one doesn't already exist.
-        if self.lock_all_neighbors_to_same_still == 1:
-            for neighbor in self.get_all_neighbors(obsnum):
-                self.dbi.set_obs_still_host(neighbor, still)
+        still = self.dbi.get_obs_still_host(obsnum)
+
+        if not still:
+            still = self.obs_to_still(obsnum)  # Get a still for a new obsid if one doesn't already exist.
+            if self.lock_all_neighbors_to_same_still == 1:
+                for neighbor in self.get_all_neighbors(obsnum):
+                    self.dbi.set_obs_still_host(neighbor, still)
 
         if still != 0:  # If the obsnum is assigned to a server that doesn't exist at the moment we need to skip it, maybe reassign later
             if ActionClass is None:
@@ -372,7 +380,7 @@ class Scheduler:
 
             a = ActionClass(obsnum, next_step, neighbor_status, self.task_clients[still], self.wf, still, timeout=self.timeout)
             if self.wf.neighbors == 1:
-                if a.has_prerequisites():
+                if a.has_prerequisites() is True:
                     return a
         # logging.debug('scheduler.get_action: (%s,%s) does not have prereqs' % (a.task, a.obs))
         return None
@@ -395,7 +403,6 @@ class Scheduler:
         #   Check if a obsid has a still already, if it does simply return it.  If it does not then lets find the lowest
         #   loaded (cpu) one and assign it.  If none are under 80% then lets just wait around, they're busy enough as is.
         ##############
-
         mystill = self.dbi.get_obs_still_host(obs)
         if mystill:
             if mystill in self.task_clients:
@@ -403,12 +410,9 @@ class Scheduler:
             else:  # We couldn't find its still server as its not in task_clients for whatever reason so punt for now
                 logger.debug("Obs attached to non-existant STILL OBS : %s, STILL %s" % (obs, mystill))
                 return 0
-
         else:
-
             still = self.dbi.get_most_available_still()
             while not still:
-
                 logger.info("Can't find any available still servers, they are all above 80% usage or have gone offline.  Waiting...")
                 time.sleep(10)
                 still = self.dbi.get_most_available_still()
