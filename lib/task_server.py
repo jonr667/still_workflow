@@ -149,7 +149,7 @@ class Task:
         for task in self.ts.active_tasks:
             if task.obs == self.obs:
                 self.ts.active_tasks.remove(task)  # Remove the killed task from the active task list
-
+                logger.debug("Removed task : %s from active list" % task.task)
         self.dbi.set_obs_pid(self.obs, -9)
         self.dbi.update_obs_current_stage(self.obs, failure_type)
         logger.error("Task.record_failure: Task: %s, Obsnum: %s, Type: %s" % (self.task, self.obs, failure_type))
@@ -258,7 +258,7 @@ class TaskHandler(SocketServer.StreamRequestHandler):
         if task == "STILL_KILL_OBS":  # We should only be killing a process...
             pid_of_obs_to_kill = self.server.dbi.get_obs_pid(obsnum)
             logger.debug("We recieved a kill request for obsnum: %s, shutting down pid: %s" % (obsnum, pid_of_obs_to_kill))
-            self.server.kill(pid_of_obs_to_kill)  # It's called obsnum but for the case of the kill the scheduler is packing obsnum field with the pid
+            self.server.kill(pid_of_obs_to_kill)
 
         elif task == 'COMPLETE':
             self.server.dbi.set_obs_status(obsnum, task)
@@ -316,7 +316,7 @@ class TaskServer(SocketServer.TCPServer):
                                 logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%%, mem={mem:.1f}%%, Naffinity={aff}'.format(
                                     obsnum=t.obs, task=t.task, pid=c.pid, cpu=c.cpu_percent(interval=1.0), mem=c.memory_percent(), aff=len(c.cpu_affinity())))
                     except:
-                        # logger.exception("Problem getting t.process.childred()[0] or setting affinity")
+
                         continue
                 else:
                     t.finalize()
@@ -336,7 +336,7 @@ class TaskServer(SocketServer.TCPServer):
             for task in self.active_tasks:
                 if task.process.pid == pid:
                     task.kill()
-                    self.active_tasks.remove(task)  # Remove the killed task from the active task list
+#                    self.active_tasks.remove(task)  # Remove the killed task from the active task list
                     break
         except:
             logger.exception("Problem killing off task: %s  w/  pid : %s" % (task, pid))
