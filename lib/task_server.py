@@ -11,12 +11,16 @@ import platform
 # import string
 import sys
 import psutil
-
+#import RFC5424Syslog
 # from still_shared import logger
 HOSTNAME = socket.gethostname()
+hostname = socket.gethostname()
 
-logger = logging.getLogger('taskserver')
-formating = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger('ts')
+format = '%(asctime)s - {0} - %(name)s - %(levelname)s - %(message)s'.format(hostname)
+#formating = logging.Formatter('%(asctime)s - %(hostname)s - %(name)s - %(levelname)s - %(message)s'.format(hostname))
+
+formating = logging.Formatter(format)
 logger.setLevel(logging.DEBUG)
 
 ch = logging.StreamHandler()
