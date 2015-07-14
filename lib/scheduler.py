@@ -87,8 +87,8 @@ class Action:
             # logger.debug("Index1: %s, Index of neighbor status : %s" % (index1, index_of_neighbor_status))
             if index1 is not None and index_of_neighbor_status < index1:
                 return False
-            if index2 is not None:
-                logger.debug("Index1: %s, Index of neighbor status : %s" % (index2, index_of_neighbor_status))
+#            if index2 is not None:
+#                logger.debug("Index1: %s, Index of neighbor status : %s" % (index2, index_of_neighbor_status))
             if index2 is not None and index_of_neighbor_status >= index2:
                 return False
             # logger.debug('Action.has_prerequisites: (%s,%s) prerequisites met' % (self.task, self.obs))
