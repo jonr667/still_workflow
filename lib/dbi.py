@@ -3,6 +3,7 @@ import sys
 import logging
 # import hashlib
 import datetime
+import numpy as np
 
 # from subprocess import Popen, PIPE
 
@@ -599,9 +600,11 @@ class DataBaseInterface(object):
         ###
         s = self.Session()
         since = datetime.datetime.now() - datetime.timedelta(minutes=3)
-        still = s.query(Still).filter(Still.last_checkin > since, Still.status == "OK", Still.current_load < 80).order_by(Still.current_load).first()
+        still = s.query(Still.hostname).filter(Still.last_checkin > since, Still.status == "OK", Still.current_load < 80).order_by(Still.current_load).all()
+        np.random.shuffle(still)
         s.close()
-        return still
+
+        return str(still[0][0])
 
     def get_obs_assigned_to_still(self, still_hostname):
         s = self.Session()

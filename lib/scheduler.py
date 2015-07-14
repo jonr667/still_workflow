@@ -412,9 +412,9 @@ class Scheduler:
                 return 0
         else:
             still = self.dbi.get_most_available_still()
+            print("Still : %s") % still
             while not still:
                 logger.info("Can't find any available still servers, they are all above 80% usage or have gone offline.  Waiting...")
                 time.sleep(10)
                 still = self.dbi.get_most_available_still()
-
-            return still.hostname
+            return still
