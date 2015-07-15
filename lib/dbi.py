@@ -278,7 +278,7 @@ class DataBaseInterface(object):
                 LOG.logtext = logtext
         if status is not None:
             LOG.status = status
-        logger.debug("LOG.exit_status : %s " % LOG.exit_status)
+        # logger.debug("LOG.exit_status : %s " % LOG.exit_status)
         s.add(LOG)
         s.commit()
         s.close()
