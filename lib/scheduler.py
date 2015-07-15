@@ -74,11 +74,6 @@ class Action:
         except:
             index2 = None
 
-        # logger.debug("has_prerequisites : Task : %s - Index1 : %s" % (self.task, self.wf.workflow_actions[index1]))
-        # if index2 is not None:
-        #     logger.debug("has_prerequisites : Task : %s - Index2 : %s" % (self.task, self.wf.workflow_actions[index2]))
-        # logger.debug('Action.has_prerequisites: checking (%s,%s) neighbor_status=%s' % (self.task, self.obs, self.neighbor_status))
-
         for status_of_neighbor in self.neighbor_status:
             if status_of_neighbor is None:  # indicates that obs hasn't been entered into DB yet
                 return False
@@ -116,6 +111,7 @@ class Action:
         logger.debug('Action: task_client(%s,%s)' % (task, self.obs))
         connect_returned = self.task_client.transmit(task, self.obs)
         return connect_returned
+
 
 class Scheduler:
     ###
@@ -351,8 +347,8 @@ class Scheduler:
             return None
 
         # logger.debug("Obsid : %s    Status %s" % (obsnum, status))
-        if status == 'COMPLETE':  # Jon: May be worth adding some code here to make sure to pop this observation out of the queue so we don't keep hitting it
-            logger.debug("COMPLETE for obsid : %s" % obsnum)
+        if status == 'COMPLETE':  # Jon: !!!!May be worth adding some code here to make sure to pop this observation out of the queue so we don't keep hitting it
+            # logger.debug("COMPLETE for obsid : %s" % obsnum)  # You can see how often completeds are checked by uncommenting this.. its a LOT
             return None  # obs is complete
 
         neighbors = self.dbi.get_neighbors(obsnum)
