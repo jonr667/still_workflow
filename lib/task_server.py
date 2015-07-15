@@ -334,8 +334,13 @@ class TaskServer(SocketServer.TCPServer):
             if self.watchdog_count == 30:
                 logger.debug('TaskServer is alive')
                 for t in self.active_tasks:
-                    logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%%, mem={mem:.1f}%%, Naffinity={aff}'.format(
-                        obsnum=t.obs, task=t.task, pid=c.pid, cpu=c.cpu_percent(interval=1.0), mem=c.memory_percent(), aff=len(c.cpu_affinity())))
+                    try:
+                        c = t.process.children()[0]
+                        if psutil.pid_exists(c.pid):
+                            logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%%, mem={mem:.1f}%%, Naffinity={aff}'.format(
+                                obsnum=t.obs, task=t.task, pid=c.pid, cpu=c.cpu_percent(interval=1.0), mem=c.memory_percent(), aff=len(c.cpu_affinity())))
+                    except:
+                        pass
                 self.watchdog_count = 0
             else:
                 self.watchdog_count += 1
