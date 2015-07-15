@@ -98,7 +98,7 @@ class Task:
             process = psutil.Popen(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args, cwd=self.cwd, stderr=self.OUTFILE, stdout=self.OUTFILE)
             if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
                 process.cpu_affinity(range(psutil.cpu_count()))
-            process.set_nice(10)  # Jon : I want to set all the processes evenly so they don't compete against core OS functionality slowing things down.
+            # process.set_nice(10)  # Jon : I want to set all the processes evenly so they don't compete against core OS functionality slowing things down.
             self.dbi.update_obs_current_stage(self.obs, self.task)
             self.dbi.add_log(self.obs, self.task, ' '.join(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args + ['\n']), None)
 
