@@ -96,6 +96,7 @@ class Task:
         self.outfile_counter = 0
         try:
             process = psutil.Popen(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args, cwd=self.cwd, stderr=self.OUTFILE, stdout=self.OUTFILE)
+            process.nice(10)
             if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
                 process.cpu_affinity(range(psutil.cpu_count()))
             # process.set_nice(10)  # Jon : I want to set all the processes evenly so they don't compete against core OS functionality slowing things down.
