@@ -9,16 +9,12 @@ import sys
 basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
 sys.path.append(basedir + 'lib')
 
-# import add_observations
-
-# from dbi import DataBaseInterface
-# from dbi import Observation
-
 import dbi
 from scheduler import Scheduler
 from task_server import TaskServer
 from task_server import TaskClient
 from scheduler import Action
+from still_shared import setup_logger
 
 
 class WorkFlow:
@@ -63,9 +59,9 @@ class SpawnerClass:
         self.block_size = 10
         self.lock_all_neighbors_to_same_still = 0
         self.transfers_per_still = 2
-
-        basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
-        self.path_to_do_scripts = basedir + 'scripts/'
+        self.log_path = ''
+        self.path_to_do_scripts = ''
+        self.logger = ''
 
 
 class StillScheduler(Scheduler):
@@ -130,6 +126,8 @@ def process_client_config_file(sg, wf):
     # We will read the entire cnofig file here and push it into a class
     #
     config = configparser.RawConfigParser()
+    basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
+
     if os.path.exists(sg.config_file):
         config.read(sg.config_file)
 
@@ -147,11 +145,12 @@ def process_client_config_file(sg, wf):
         sg.hosts = get_config_entry(config, 'Still', 'hosts', reqd=True, remove_spaces=True).split(",")
         sg.port = int(get_config_entry(config, 'Still', 'port', reqd=True, remove_spaces=True))
         sg.data_dir = get_config_entry(config, 'Still', 'data_dir', reqd=False, remove_spaces=False)
-        sg.path_to_do_scripts = get_config_entry(config, 'Still', 'path_to_do_scripts', reqd=False, remove_spaces=False)
+        sg.path_to_do_scripts = get_config_entry(config, 'Still', 'path_to_do_scripts', reqd=False, remove_spaces=False, default_val=basedir + 'scripts/')
         sg.timeout = int(get_config_entry(config, 'Still', 'timeout', reqd=False, remove_spaces=True))
         sg.block_size = int(get_config_entry(config, 'Still', 'block_size', reqd=False, remove_spaces=True))
         sg.actions_per_still = int(get_config_entry(config, 'Still', 'actions_per_still', reqd=False, remove_spaces=True, default_val=8))
         sg.sleep_time = int(get_config_entry(config, 'Still', 'sleep_time', reqd=False, remove_spaces=True))
+        sg.log_path = get_config_entry(config, 'Still', 'log_path', reqd=False, remove_spaces=False, default_val=basedir + 'log/')
         # Read in all the workflow information
         wf.workflow_actions = tuple(get_config_entry(config, 'WorkFlow', 'actions', reqd=True, remove_spaces=True).split(","))
         wf.workflow_actions_endfile = tuple(get_config_entry(config, 'WorkFlow', 'actions_endfile', reqd=False, remove_spaces=True).split(","))
@@ -200,8 +199,9 @@ def start_client(sg, wf, args):
     except:
         print("We could not run a test on the database and are aborting.  Please check the DB config settings")
         sys.exit(1)
-
-    task_clients = [TaskClient(sg.dbi, s, wf, port=sg.port) for s in sg.hosts]
+    print("My Log Path : %s") % sg.log_path
+    sg.logger = setup_logger("Scheduler", "DEBUG", sg.log_path)
+    task_clients = [TaskClient(sg.dbi, s, wf, sg.port, sg) for s in sg.hosts]
     # myscheduler = StillScheduler(task_clients, wf, dbi=sg.dbi, actions_per_still=sg.actions_per_still, blocksize=sg.block_size, nstills=len(sg.hosts), timeout=sg.timeout, sleep=sg.sleep_time)  # Init scheduler daemon
     # Screw it going to just break a bunch of the unittest stuff and simplify the calling of the scheduler to take SpawnerClass
     myscheduler = StillScheduler(task_clients, wf, sg)  # Init scheduler daemon
@@ -222,8 +222,8 @@ def start_server(sg, wf, args):
         my_port = int(args.port)
     else:
         my_port = sg.port
-
-    task_server = TaskServer(sg.dbi, data_dir=mydata_dir, port=my_port, path_to_do_scripts=sg.path_to_do_scripts)
+    sg.logger = setup_logger("TS", "DEBUG", sg.log_path)
+    task_server = TaskServer(sg.dbi, sg, data_dir=mydata_dir, port=my_port, path_to_do_scripts=sg.path_to_do_scripts)
     task_server.start()
     return
 

@@ -1,12 +1,15 @@
 import time
 import sys
 import logging
+import socket
 # import readchar
 import os
 # import datetime
 
 
 from task_server import TaskClient
+from still_shared import setup_logger
+
 # import datetime
 # from still_shared import logger
 
@@ -14,20 +17,22 @@ from task_server import TaskClient
 # basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
 # sys.path.append(basedir + 'bin')
 
-logger = logging.getLogger('scheduler')
-formating = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger.setLevel(logging.DEBUG)
+#HOSTNAME = socket.gethostname()
+#logger = logging.getLogger('scheduler')
+#formating = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+#logger.setLevel(logging.DEBUG)
 
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-ch.setFormatter(formating)
+#ch = logging.StreamHandler()
+#ch.setLevel(logging.DEBUG)
+#ch.setFormatter(formating)
 
-fh = logging.FileHandler("scheduler.log")
-fh.setLevel(logging.DEBUG)
-fh.setFormatter(formating)
+#fh = logging.FileHandler("scheduler.log")
+#fh.setLevel(logging.DEBUG)
+#fh.setFormatter(formating)
 
-logger.addHandler(fh)
-logger.addHandler(ch)
+#logger.addHandler(fh)
+#logger.addHandler(ch)
+logger = True  # Just here to make my syntax checker not go weird from using a global variable in Scheduler.init
 
 MAXFAIL = 5  # Jon : move this into config
 TIME_INT_FOR_STILL_CHECK = 100
@@ -55,6 +60,7 @@ class Action:
         self.timeout = timeout
         self.wf = workflow
         self.task_client = task_client
+#        print ("My Scheduler logger: %s") % Scheduler.logger
 
     def set_priority(self, p):
         '''Assign a priority to this action.  Highest priorities are scheduled first.'''
@@ -119,6 +125,9 @@ class Scheduler:
     # taken, and then schedules them on stills according to priority.'''
     ###
     def __init__(self, task_clients, workflow, sg):
+
+        global logger
+        logger = sg.logger
         self.sg = sg  # Might as well have it around in case I find I need something from it...  Its just a little memory
         self.nstills = len(sg.hosts)  # preauto
         self.actions_per_still = sg.actions_per_still
@@ -162,7 +171,7 @@ class Scheduler:
         for still in stills:
             if still.hostname not in self.task_clients:
                 logger.debug("Discovery of new still : %s" % still.hostname)
-                self.task_clients[still.hostname] = TaskClient(self.dbi, still.hostname, self.wf, port=still.port)
+                self.task_clients[still.hostname] = TaskClient(self.dbi, still.hostname, self.wf, still.port, self.sg)
                 self.launched_actions[still.hostname] = []
 
         return

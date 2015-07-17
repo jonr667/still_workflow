@@ -11,30 +11,30 @@ import platform
 # import string
 import sys
 import psutil
-#import RFC5424Syslog
-# from still_shared import logger
+from still_shared import setup_logger
+
 HOSTNAME = socket.gethostname()
-hostname = socket.gethostname()
 
-logger = logging.getLogger('ts')
-format = '%(asctime)s - {0} - %(name)s - %(levelname)s - %(message)s'.format(hostname)
-#formating = logging.Formatter('%(asctime)s - %(hostname)s - %(name)s - %(levelname)s - %(message)s'.format(hostname))
+# logger = logging.getLogger('ts')
+# format = '%(asctime)s - {0} - %(name)s - %(levelname)s - %(message)s'.format(HOSTNAME)
 
-formating = logging.Formatter(format)
-logger.setLevel(logging.DEBUG)
 
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-ch.setFormatter(formating)
+# formating = logging.Formatter(format)
+# logger.setLevel(logging.DEBUG)
 
-fh = logging.FileHandler("%s_ts.log" % HOSTNAME)
-fh.setLevel(logging.DEBUG)
-fh.setFormatter(formating)
+# ch = logging.StreamHandler()
+# ch.setLevel(logging.DEBUG)
+# ch.setFormatter(formating)
 
-logger.addHandler(fh)
-logger.addHandler(ch)
+# fh = logging.FileHandler("%s_ts.log" % HOSTNAME)
+# fh.setLevel(logging.DEBUG)
+# fh.setFormatter(formating)
 
-logger.propagate = True
+# logger.addHandler(fh)
+# logger.addHandler(ch)
+
+# logger.propagate = True
+logger = True
 PKT_LINE_LEN = 160
 STILL_PORT = 14204
 PLATFORM = platform.system()
@@ -166,11 +166,15 @@ class Task:
 
 
 class TaskClient:
-    def __init__(self, dbi, host, workflow, port=STILL_PORT):
+    def __init__(self, dbi, host, workflow, port, sg):
         self.dbi = dbi
+        self.sg = sg
         self.host_port = (host, port)
         self.wf = workflow
         self.error_count = 0
+        self.logger = sg.logger
+        global logger
+        logger = sg.logger
 
     def transmit(self, task, obs):
         recieved = ''
@@ -287,7 +291,8 @@ class TaskHandler(SocketServer.StreamRequestHandler):
 class TaskServer(SocketServer.TCPServer):
     allow_reuse_address = True
 
-    def __init__(self, dbi, data_dir='.', port=STILL_PORT, handler=TaskHandler, path_to_do_scripts="."):
+    def __init__(self, dbi, sg, data_dir='.', port=STILL_PORT, handler=TaskHandler, path_to_do_scripts="."):
+
         SocketServer.TCPServer.__init__(self, ('', port), handler)
         self.active_tasks_semaphore = threading.Semaphore()
         self.active_tasks = []
@@ -297,6 +302,9 @@ class TaskServer(SocketServer.TCPServer):
         self.watchdog_count = 0
         self.port = port
         self.path_to_do_scripts = path_to_do_scripts
+        self.logger = sg.logger
+        global logger
+        logger = sg.logger
         logger.debug("Path to do_ Scripts : %s" % self.path_to_do_scripts)
         logger.debug("Data_dir : %s" % self.data_dir)
         logger.debug("Port : %s" % self.port)
