@@ -239,7 +239,7 @@ class TaskClient:
                 args = eval(self.wf.action_args[task])
             except:
                 logger.exception("Could not process arguments for task %s please check args for this task in config file, ARGS: %s" % (task, self.wf.action_args))
-                args = []
+                args = [obs]
                 # sys.exit(1)
         return args
 
