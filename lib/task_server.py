@@ -77,6 +77,7 @@ class Task:
         self.outfile_counter = 0
         self.path_to_do_scripts = path_to_do_scripts
         self.ts = TaskServer
+        self.sg = TaskServer.sg
 
     def run(self):
         if self.process is not None:
@@ -95,7 +96,8 @@ class Task:
         self.OUTFILE = tempfile.TemporaryFile()
         self.outfile_counter = 0
         try:
-            process = psutil.Popen(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args, cwd=self.cwd, stderr=self.OUTFILE, stdout=self.OUTFILE)
+            print(self.sg.env_vars)
+            process = psutil.Popen(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args, cwd=self.cwd, stderr=self.OUTFILE, stdout=self.OUTFILE)
             process.nice(10)
             if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
                 process.cpu_affinity(range(psutil.cpu_count()))
@@ -297,6 +299,7 @@ class TaskServer(SocketServer.TCPServer):
         self.active_tasks_semaphore = threading.Semaphore()
         self.active_tasks = []
         self.dbi = dbi
+        self.sg = sg
         self.data_dir = data_dir
         self.is_running = False
         self.watchdog_count = 0

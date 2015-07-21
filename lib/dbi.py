@@ -558,7 +558,7 @@ class DataBaseInterface(object):
         ###
         since = datetime.datetime.now() - datetime.timedelta(minutes=3)
         s = self.Session()
-        stills = s.query(Still).filter(Still.last_checkin > since, Still.status == "OK")
+        stills = s.query(Still).filter(Still.last_checkin > since, Still.status == "OK").all()
         s.close()
         return stills
 

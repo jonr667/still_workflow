@@ -8,7 +8,7 @@ import os
 
 
 from task_server import TaskClient
-from still_shared import setup_logger
+# from still_shared import setup_logger
 
 # import datetime
 # from still_shared import logger
@@ -17,21 +17,6 @@ from still_shared import setup_logger
 # basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
 # sys.path.append(basedir + 'bin')
 
-#HOSTNAME = socket.gethostname()
-#logger = logging.getLogger('scheduler')
-#formating = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-#logger.setLevel(logging.DEBUG)
-
-#ch = logging.StreamHandler()
-#ch.setLevel(logging.DEBUG)
-#ch.setFormatter(formating)
-
-#fh = logging.FileHandler("scheduler.log")
-#fh.setLevel(logging.DEBUG)
-#fh.setFormatter(formating)
-
-#logger.addHandler(fh)
-#logger.addHandler(ch)
 logger = True  # Just here to make my syntax checker not go weird from using a global variable in Scheduler.init
 
 MAXFAIL = 5  # Jon : move this into config
@@ -60,7 +45,6 @@ class Action:
         self.timeout = timeout
         self.wf = workflow
         self.task_client = task_client
-#        print ("My Scheduler logger: %s") % Scheduler.logger
 
     def set_priority(self, p):
         '''Assign a priority to this action.  Highest priorities are scheduled first.'''
@@ -147,6 +131,7 @@ class Scheduler:
         self.failcount = {}
         self.wf = workflow  # Jon: Moved the workflow class to instantiated on object creation, should do the same for dbi probably
         self.task_clients = {}
+        self.stills = []
 
         # If task_clients is set to AUTO then check the db for still servers
         if task_clients[0].host_port[0] == "AUTO":
@@ -161,18 +146,20 @@ class Scheduler:
         # find_all_stills : Check the database for all available stills with status OK
         ###
         logger.debug("looking for stills...")
-        stills = self.dbi.get_available_stills()
+        self.stills = self.dbi.get_available_stills()
 
-        while stills.count() < 1:
+        while len(self.stills) < 1:
             logger.debug("Can't find any stills! Waiting for 10sec and trying again")
             time.sleep(10)
-            stills = self.dbi.get_available_stills()
+            self.stills = self.dbi.get_available_stills()
 
-        for still in stills:
+        for still in self.stills:
             if still.hostname not in self.task_clients:
                 logger.debug("Discovery of new still : %s" % still.hostname)
                 self.task_clients[still.hostname] = TaskClient(self.dbi, still.hostname, self.wf, still.port, self.sg)
                 self.launched_actions[still.hostname] = []
+
+        # Need to also remove stills that go away...
 
         return
 
@@ -313,10 +300,9 @@ class Scheduler:
         observations = self.dbi.list_open_observations()  # Get only observations that are NOT :  NEW OR COMPLETE
 
         for open_obs in observations:
-
             if open_obs not in self._active_obs_dict:
-                    self._active_obs_dict[open_obs] = len(self.active_obs)
-                    self.active_obs.append(open_obs)
+                self._active_obs_dict[open_obs] = len(self.active_obs)
+                self.active_obs.append(open_obs)
         return
 
     def update_action_queue(self, ActionClass=None, action_args=()):
@@ -326,9 +312,8 @@ class Scheduler:
 
         actions = []
         for myobs in self.active_obs:
-            if self.dbi.get_obs(myobs).current_stage_in_progress == "FAILED":
+            if self.dbi.get_obs(myobs).current_stage_in_progress == "FAILED" or self.dbi.get_obs(myobs).current_stage_in_progress == "COMPLETE":
                 self.active_obs.remove(myobs)
-
             else:
                 myaction = self.get_action(myobs, ActionClass=ActionClass, action_args=action_args)
                 if (myaction is not None) and (self.already_launched(myaction) is not True):
@@ -352,17 +337,21 @@ class Scheduler:
             None defaults to the standard Action'''
         obsinfo = self.dbi.get_obs(obsnum)
         status = obsinfo.status
+
         if obsinfo.current_stage_in_progress == "FAILED":
             return None
 
-        # logger.debug("Obsid : %s    Status %s" % (obsnum, status))
-        if status == 'COMPLETE':  # Jon: !!!!May be worth adding some code here to make sure to pop this observation out of the queue so we don't keep hitting it
+        if status == 'COMPLETE':
             # logger.debug("COMPLETE for obsid : %s" % obsnum)  # You can see how often completeds are checked by uncommenting this.. its a LOT
             return None  # obs is complete
 
+        # Check that the still assigned to the obs is currently in the list of active stills
+        if any(still for still in self.stills if still.hostname != obsinfo.stillhost) and obsinfo.stillhost is not None:
+            return None
+
         neighbors = self.dbi.get_neighbors(obsnum)
 
-        if None in neighbors:  # is this an end-file that can't be processed past UVCR?
+        if None in neighbors:
             cur_step_index = self.wf.workflow_actions_endfile.index(status)
             next_step = self.wf.workflow_actions_endfile[cur_step_index + 1]
 
@@ -393,7 +382,7 @@ class Scheduler:
     def determine_priority(self, action):
         '''Assign a priority to an action based on its status and the time
         order of the obs to which this action is attached.'''
-    #    print("From determine_priority, action.obs : %s : ") % action.obs
+
         pol, jdcnt = int(action.obs) / 2 ** 32, int(action.obs) % 2 ** 32  # XXX maybe not make this have to explicitly match dbi bits
         return jdcnt * 4 + pol  # prioritize first by time, then by pol
         # XXX might want to prioritize finishing a obs already started before

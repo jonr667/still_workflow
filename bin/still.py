@@ -62,6 +62,49 @@ class SpawnerClass:
         self.log_path = ''
         self.path_to_do_scripts = ''
         self.logger = ''
+        self.env_vars = []
+
+    def preflight_check_scheduler(self):
+        # Nothing to do here at the moment, just a place holder
+        return
+
+    def preflight_check_ts(self, wf):
+        if self.check_path("Data_Dir", self.data_dir) != 0:  # Check data_dir path exists and is writeable
+            sys.exit(1)
+
+        workflow_list = list(wf.workflow_actions)[1:]  # Remove the first task as its a dummy task to set an obs status to for processing to start
+        for task in workflow_list:
+            if self.check_script_path(task) != 0:
+                sys.exit(1)
+
+    def check_path(self, dir_type, dir_path):
+
+        if os.path.isdir(dir_path):
+            if os.access(dir_path, os.W_OK):
+                return 0
+            else:
+                print("ERROR: %s path : %s is not writeable by this program") % (dir_type, dir_path)
+        else:
+            print("ERROR: %s path : %s does not seem to exist.") % (dir_type, dir_path)
+        return 1
+
+    def check_script_path(self, task):
+        logger = self.logger
+
+        if task == "COMPLETE":
+            return 0
+        if self.path_to_do_scripts[-1:] == '/':
+            self.path_to_do_scripts = self.path_to_do_scripts[:-1]
+        full_path = self.path_to_do_scripts + '/do_' + task + '.sh'
+        if os.path.isfile(full_path):
+            if os.access(full_path, os.X_OK):
+                return 0
+            else:
+                logger.critical("Script : %s is not set as executable, please run chmod +x %s" % (full_path, full_path))
+        else:
+            logger.critical("Count not find workflow script : %s" % full_path)
+
+        return 1
 
 
 class StillScheduler(Scheduler):
@@ -151,6 +194,11 @@ def process_client_config_file(sg, wf):
         sg.actions_per_still = int(get_config_entry(config, 'Still', 'actions_per_still', reqd=False, remove_spaces=True, default_val=8))
         sg.sleep_time = int(get_config_entry(config, 'Still', 'sleep_time', reqd=False, remove_spaces=True))
         sg.log_path = get_config_entry(config, 'Still', 'log_path', reqd=False, remove_spaces=False, default_val=basedir + 'log/')
+
+        if "EnvironmentVars" in config_sections:
+            sg.env_vars = config.items("EnvironmentVars")
+            print(sg.env_vars)
+
         # Read in all the workflow information
         wf.workflow_actions = tuple(get_config_entry(config, 'WorkFlow', 'actions', reqd=True, remove_spaces=True).split(","))
         wf.workflow_actions_endfile = tuple(get_config_entry(config, 'WorkFlow', 'actions_endfile', reqd=False, remove_spaces=True).split(","))
@@ -159,7 +207,7 @@ def process_client_config_file(sg, wf):
         wf.neighbors = int(get_config_entry(config, 'WorkFlow', 'neighbors', reqd=False, remove_spaces=False, default_val=0))
         wf.lock_all_neighbors_to_same_still = int(get_config_entry(config, 'WorkFlow', 'lock_all_neighbors_to_same_still', reqd=False, remove_spaces=False, default_val=0))
 
-        for action in wf.workflow_actions or wf.workflow_actions_endfile:  # Collect all the prereqs and arg strings for any action of the workflow and throw them into a dict of keys and lists
+        for action in wf.workflow_actions or wf.workflow_actions_endfile:      # Collect all the prereqs and arg strings for any action of the workflow and throw them into a dict of keys and lists
             wf.action_args[action] = '[\'%s:%s/%s\' % (pot, path, basename)]'  # Put in a default host:path/filename for each actions arguements that get passed to do_ scripts
 
             if action in config_sections:
@@ -169,15 +217,22 @@ def process_client_config_file(sg, wf):
     else:
         print("Config file does not appear to exist : %s") % sg.config_file
         sys.exit(1)
+
+    if sg.check_path("Logging", sg.log_path) != 0:  # Check logging path exists and is writeable
+        sys.exit(1)
+
     return 0
 
 
-def get_dbi_from_config(config_file):
-    sg = SpawnerClass()
-    wf = WorkFlow()
-    sg.config_file = config_file
-    process_client_config_file(sg, wf)
+def get_dbi_from_config(config_file, SpawnerClass=None, still_startup=0):
 
+    if still_startup != 1:
+        sg = SpawnerClass()
+        wf = WorkFlow()
+        sg.config_file = config_file
+        process_client_config_file(sg, wf)
+    else:
+        sg = SpawnerClass
     # Create database interface with SQL Alchemy
     sg.dbi = StillDataBaseInterface(sg.dbhost, sg.dbport, sg.dbtype, sg.dbname, sg.dbuser, sg.dbpasswd, test=False)
     return sg.dbi
@@ -199,10 +254,11 @@ def start_client(sg, wf, args):
     except:
         print("We could not run a test on the database and are aborting.  Please check the DB config settings")
         sys.exit(1)
+
     print("My Log Path : %s") % sg.log_path
     sg.logger = setup_logger("Scheduler", "DEBUG", sg.log_path)
     task_clients = [TaskClient(sg.dbi, s, wf, sg.port, sg) for s in sg.hosts]
-    # myscheduler = StillScheduler(task_clients, wf, dbi=sg.dbi, actions_per_still=sg.actions_per_still, blocksize=sg.block_size, nstills=len(sg.hosts), timeout=sg.timeout, sleep=sg.sleep_time)  # Init scheduler daemon
+
     # Screw it going to just break a bunch of the unittest stuff and simplify the calling of the scheduler to take SpawnerClass
     myscheduler = StillScheduler(task_clients, wf, sg)  # Init scheduler daemon
     myscheduler.start(dbi=sg.dbi, ActionClass=Action)
@@ -223,6 +279,8 @@ def start_server(sg, wf, args):
     else:
         my_port = sg.port
     sg.logger = setup_logger("TS", "DEBUG", sg.log_path)
+    sg.preflight_check_ts(wf)
+
     task_server = TaskServer(sg.dbi, sg, data_dir=mydata_dir, port=my_port, path_to_do_scripts=sg.path_to_do_scripts)
     task_server.start()
     return
@@ -257,7 +315,7 @@ def main():
 
     # Create database interface with SQL Alchemy
 
-    sg.dbi = get_dbi_from_config(sg.config_file)
+    get_dbi_from_config(sg.config_file, SpawnerClass=sg, still_startup=1)
 
     if args.client is True:
         start_client(sg, workflow_objects, args)
