@@ -31,7 +31,7 @@ def ingest_addtional_opsids(sg):
     for obsid in unique_obsids:  # We now need to add all the files that are associated with each obs id to the db as well as the primary entry
         print("Adding obsid: %s") % obsid
         sg.db.add_observation(obsnum=obsid, date=obsid, date_type='GPS', pol=0, filename='none', host='none', length=0, status='NEW')  # Add primary entry for obsnum
-        sg.db.add_file(obsid, "myhost", "/some/path/do/something")
+        sg.db.add_file(obsid, "na", "na")
     return 0
 
 
