@@ -1,0 +1,43 @@
+v2.0
+New Feature List
+
+Major:
+
+* UDP connections were replaced by TCP for better handling of communications between scheduler and server
+
+* There now exists a common interface for starting/stopping the Still scheduler and servers. This also serves as a unified 
+   handler of all config file and command line argument parsing
+   
+* The hardcoded Paper workflow was removed and replaced with a config file definable workflow
+
+* Brought all code up to standard PEP8 compliance and Python3 standards
+
+* New AutoDiscover interface for handling Still servers allowing servers to be added and removed while the scheduler remains online 
+   without the need to configure any at the start
+   
+* High load handling, the scheduler now checks that a Still server has recently checked in and that its load is below a threshold
+
+* Dynamic load handling for new obsids, as new obsids are added they, along with their neighbors, are intelligently handed off 
+   to the server with the lowest level of activity.
+   
+* Support for the PostgreSQL database added
+
+* Path structure updated to conform to normal Posix standards allowing for more rapid deployment and updates
+
+* Scheduler can now properly communicate with servers to kill tasks that have exceeded the timeout period
+
+
+
+Minor/Bugfixes:
+
+* Neighbor support has become a config file option
+
+* Moved to a date format system that can handle dates other than Julian
+
+* Fixed issue where multiple of the same processes could be executing
+
+* Performance improvements related to SQL queries pulling down less extraneous data to process through  
+
+* Greatly enhanced exception handling
+
+* Better recovery handling, tasks will recover to the server they were previously on even if the list of servers changes
