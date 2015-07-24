@@ -1,12 +1,9 @@
 import time
 import sys
 import logging
-import socket
-# import readchar
-import os
-# import datetime
 
-
+from still_shared import InputThread
+from still_shared import handle_keyboard_input
 from task_server import TaskClient
 # from still_shared import setup_logger
 
@@ -17,7 +14,7 @@ from task_server import TaskClient
 # basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
 # sys.path.append(basedir + 'bin')
 
-logger = True  # Just here to make my syntax checker not go weird from using a global variable in Scheduler.init
+logger = True  # This is just here because the jedi syntax checker is dumb.
 
 MAXFAIL = 5  # Jon : move this into config
 TIME_INT_FOR_STILL_CHECK = 100
@@ -127,7 +124,7 @@ class Scheduler:
         self.dbi = sg.dbi
         self.launched_actions = {}
 
-        self._run = False
+        self.keep_running = False
         self.failcount = {}
         self.wf = workflow  # Jon: Moved the workflow class to instantiated on object creation, should do the same for dbi probably
         self.task_clients = {}
@@ -147,8 +144,8 @@ class Scheduler:
         ###
         logger.debug("looking for stills...")
         self.stills = self.dbi.get_available_stills()
-
         while len(self.stills) < 1:
+
             logger.debug("Can't find any stills! Waiting for 10sec and trying again")
             time.sleep(10)
             self.stills = self.dbi.get_available_stills()
@@ -164,7 +161,7 @@ class Scheduler:
         return
 
     def quit(self):
-        self._run = False
+        self.keep_running = False
 
     def ext_command_hook(self):
         return
@@ -172,13 +169,16 @@ class Scheduler:
     def start(self, dbi, ActionClass=None, action_args=()):
         '''Begin scheduling (blocking).
         dbi: DataBaseInterface'''
+        self.user_input = InputThread()
+        self.user_input.start()
 
-        self._run = True
+        self.keep_running = True
         logger.info('Starting Scheduler')
         self.dbi = dbi
         last_checked_for_stills = time.time()
 
-        while self._run:
+        while self.keep_running:
+
             if (time.time() - last_checked_for_stills) > TIME_INT_FOR_STILL_CHECK:
                 self.find_all_stills()
                 last_checked_for_stills = time.time()
@@ -199,7 +199,17 @@ class Scheduler:
                         break  # move on to next still
 
             self.clean_completed_actions(self.dbi)
-            time.sleep(self.sleep_time)
+
+            keyboard_input = self.user_input.get_user_input()
+            if keyboard_input is not None:
+                handle_keyboard_input(self, keyboard_input)
+            else:
+                time.sleep(self.sleep_time)
+        self.shutdown()
+
+    def shutdown(self):
+        print("Shutting down...")
+        sys.exit(0)
 
     def get_all_neighbors(self, obsnum):
         ###

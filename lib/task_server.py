@@ -1,40 +1,31 @@
 import SocketServer
-import logging
 import threading
 import time
 import socket
 import os
 import tempfile
 import platform
+from string import upper
 
 # import scheduler
 # import string
 import sys
 import psutil
-from still_shared import setup_logger
+#from still_shared import setup_logger
+
+from BaseHTTPServer import BaseHTTPRequestHandler
+from BaseHTTPServer import HTTPServer
+import urlparse
+import cgi
+
+
+from still_shared import InputThread
+from still_shared import handle_keyboard_input
+
+logger = True  # This is just here because the jedi syntax checker is dumb.
 
 HOSTNAME = socket.gethostname()
 
-# logger = logging.getLogger('ts')
-# format = '%(asctime)s - {0} - %(name)s - %(levelname)s - %(message)s'.format(HOSTNAME)
-
-
-# formating = logging.Formatter(format)
-# logger.setLevel(logging.DEBUG)
-
-# ch = logging.StreamHandler()
-# ch.setLevel(logging.DEBUG)
-# ch.setFormatter(formating)
-
-# fh = logging.FileHandler("%s_ts.log" % HOSTNAME)
-# fh.setLevel(logging.DEBUG)
-# fh.setFormatter(formating)
-
-# logger.addHandler(fh)
-# logger.addHandler(ch)
-
-# logger.propagate = True
-logger = True
 PKT_LINE_LEN = 160
 STILL_PORT = 14204
 PLATFORM = platform.system()
@@ -253,26 +244,53 @@ class TaskClient:
             self.transmit('KILL', obs)
 
 
-class TaskHandler(SocketServer.StreamRequestHandler):
-
+class TaskHandler(BaseHTTPRequestHandler):
     def get_pkt(self):
         pkt = self.data
         task, obsnum, still, args = from_pkt(pkt)
         return task, obsnum, still, args
 
-    def handle(self):
+    def do_GET(self):
+        self.send_response(200)  # Return a response of 200, OK to the client
+        self.end_headers()
+        parsed_path = urlparse.urlparse(self.path)
+
+        print(parsed_path)
+        if upper(parsed_path.path) == "/KILL_OBS":
+            try:
+                obsnum = str(parsed_path.query)
+                pid_of_obs_to_kill = self.server.dbi.get_obs_pid(obsnum)
+                logger.debug("We recieved a kill request for obsnum: %s, shutting down pid: %s" % (obsnum, pid_of_obs_to_kill))
+                self.server.kill(pid_of_obs_to_kill)
+                self.send_response(200)  # Return a response of 200, OK to the client
+                self.end_headers()
+            except:
+                logger.exception("Could not kill observation, url path called : %s" % self.path)
+                self.send_response(400)  # Return a response of 200, OK to the client
+                self.end_headers()
+        return
+
+    def do_POST(self):
         task_already_exists = False
-        self.data = self.rfile.readline().strip()
-        self.wfile.write("OK\n")
 
-        task, obsnum, still, args = self.get_pkt()
-        logger.info('TaskHandler.handle: received (%s,%s) with args=%s' % (task, obsnum, ' '.join(args)))
-        if task == "STILL_KILL_OBS":  # We should only be killing a process...
-            pid_of_obs_to_kill = self.server.dbi.get_obs_pid(obsnum)
-            logger.debug("We recieved a kill request for obsnum: %s, shutting down pid: %s" % (obsnum, pid_of_obs_to_kill))
-            self.server.kill(pid_of_obs_to_kill)
+        form = cgi.FieldStorage(fp=self.rfile, headers=self.headers, environ={'REQUEST_METHOD': 'POST', 'CONTENT_TYPE': self.headers['Content-Type']})
 
-        elif task == 'COMPLETE':
+        self.send_response(200)  # Return a response of 200, OK to the client
+        self.end_headers()
+
+        for field in form.keys():
+            field_item = form[field].value
+            print("Field : %s, Form[field]: %s") % (field, field_item)
+
+        if upper(self.path) == "/NEW_TASK":
+            task = form.getfirst("task", "").upper()
+            obsnum = form.getfirst("obsnum", "").upper()
+            still = form.getfirst("still", "").upper()
+            args = form.getfirst("args", "").upper()
+            env_vars = form.getfirst("env_vars", "").upper()
+            logger.info('TaskHandler.handle: received (%s,%s) with args=%s' % (task, obsnum, ' '.join(args)))
+
+        if task == 'COMPLETE':
             self.server.dbi.set_obs_status(obsnum, task)
 
         else:
@@ -290,18 +308,17 @@ class TaskHandler(SocketServer.StreamRequestHandler):
         return
 
 
-class TaskServer(SocketServer.TCPServer):
+class TaskServer(HTTPServer):
     allow_reuse_address = True
 
     def __init__(self, dbi, sg, data_dir='.', port=STILL_PORT, handler=TaskHandler, path_to_do_scripts="."):
-
-        SocketServer.TCPServer.__init__(self, ('', port), handler)
+        HTTPServer.__init__(self, (HOSTNAME, port), handler)  # Class us into HTTPServer so we can make calls from TaskHandler into this class via self.server.
         self.active_tasks_semaphore = threading.Semaphore()
         self.active_tasks = []
         self.dbi = dbi
         self.sg = sg
         self.data_dir = data_dir
-        self.is_running = False
+        self.keep_running = False
         self.watchdog_count = 0
         self.port = port
         self.path_to_do_scripts = path_to_do_scripts
@@ -318,7 +335,10 @@ class TaskServer(SocketServer.TCPServer):
         self.active_tasks_semaphore.release()
 
     def finalize_tasks(self, poll_interval=5.):
-        while self.is_running:
+        self.user_input = InputThread()
+        self.user_input.start()
+
+        while self.keep_running:
             self.active_tasks_semaphore.acquire()
             new_active_tasks = []
             for t in self.active_tasks:
@@ -328,13 +348,11 @@ class TaskServer(SocketServer.TCPServer):
                         c = t.process.children()[0]
                         # Check the affinity!
                         if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
-
                             if len(c.cpu_affinity()) < psutil.cpu_count():
                                 logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%%, mem={mem:.1f}%%, Naffinity={aff}'.format(
                                     obsnum=t.obs, task=t.task, pid=c.pid, cpu=c.cpu_percent(interval=1.0), mem=c.memory_percent(), aff=len(c.cpu_affinity())))
                                 c.cpu_affinity(range(psutil.cpu_count()))
                     except:
-
                         continue
                 else:
                     t.finalize()
@@ -357,6 +375,11 @@ class TaskServer(SocketServer.TCPServer):
             else:
                 self.watchdog_count += 1
 
+            self.keyboard_input = self.user_input.get_user_input()
+            if self.keyboard_input is not None:
+                handle_keyboard_input(self, self.keyboard_input)
+        return
+
     def kill(self, pid):
         try:
             for task in self.active_tasks:
@@ -376,7 +399,7 @@ class TaskServer(SocketServer.TCPServer):
         #
         # Just a timer that will update that its last_checkin time in the database every 5min
         #
-        while self.is_running is True:
+        while self.keep_running is True:
             hostname = socket.gethostname()
             ip_addr = socket.gethostbyname(hostname)
             cpu_usage = psutil.cpu_percent()
@@ -388,7 +411,7 @@ class TaskServer(SocketServer.TCPServer):
     def start(self):
         psutil.cpu_percent()
         time.sleep(1)
-        self.is_running = True
+        self.keep_running = True
         t = threading.Thread(target=self.finalize_tasks)
         t.daemon = True
         t.start()
@@ -401,22 +424,23 @@ class TaskServer(SocketServer.TCPServer):
             timer_thread.daemon = True  # Make it a daemon so that when ctrl-c happens this thread goes away
             timer_thread.start()
             # Start the lisetenser server
+            # self.httpserver = HTTPServer((HOSTNAME, self.port), TaskHandler)
             self.serve_forever()
+#            self.serve_forever()
         finally:
             self.shutdown()
-#            t.join()
 
     def shutdown(self):
-        logger.debug("Shutting Down task_server")
+        logger.debug("Shutting down task_server")
         hostname = socket.gethostname()
         ip_addr = socket.gethostbyname(hostname)
         cpu_usage = psutil.cpu_percent()
         self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), self.data_dir, status="OFFLINE")
 
-        self.is_running = False
+        self.keep_running = False
         for t in self.active_tasks:
             try:
                 t.process.kill()
-            except(OSError):
+            except():
                 pass
-        SocketServer.TCPServer.shutdown(self)
+        HTTPServer.shutdown(self)
