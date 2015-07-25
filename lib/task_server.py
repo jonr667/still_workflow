@@ -1,23 +1,20 @@
-import SocketServer
 import threading
 import time
 import socket
 import os
 import tempfile
 import platform
-from string import upper
-
-# import scheduler
-# import string
+import urlparse
+import cgi
+import httplib
+import urllib
 import sys
 import psutil
-#from still_shared import setup_logger
+
+from string import upper
 
 from BaseHTTPServer import BaseHTTPRequestHandler
 from BaseHTTPServer import HTTPServer
-import urlparse
-import cgi
-
 
 from still_shared import InputThread
 from still_shared import handle_keyboard_input
@@ -78,6 +75,7 @@ class Task:
             self.record_failure()
         else:
             self.record_launch()
+        return
 
     def _run(self):
         process = None
@@ -87,17 +85,18 @@ class Task:
         self.OUTFILE = tempfile.TemporaryFile()
         self.outfile_counter = 0
         try:
-            print(self.sg.env_vars)
-            process = psutil.Popen(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args, cwd=self.cwd, stderr=self.OUTFILE, stdout=self.OUTFILE)
-            process.nice(10)
+            current_env = os.environ
+            full_env = current_env
+            process = psutil.Popen(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args, cwd=self.cwd, env=full_env, stderr=self.OUTFILE, stdout=self.OUTFILE)
+            process.nice(2)  # Jon : I want to set all the processes evenly so they don't compete against core OS functionality slowing things down.
             if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
                 process.cpu_affinity(range(psutil.cpu_count()))
-            # process.set_nice(10)  # Jon : I want to set all the processes evenly so they don't compete against core OS functionality slowing things down.
+
             self.dbi.update_obs_current_stage(self.obs, self.task)
             self.dbi.add_log(self.obs, self.task, ' '.join(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args + ['\n']), None)
 
         except Exception:
-            logger.exception('Task._run: (%s,%s) error="%s"' % (self.task, self.obs, ' '.join(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args)))
+            logger.exception('Task._run: (%s,%s) error="%s"' % (self.task, self.obs, ' '.join(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args)))
             self.record_failure()
             if FAIL_ON_ERROR == 1:
                 self.ts.shutdown()
@@ -110,7 +109,7 @@ class Task:
             return None
         self.OUTFILE.seek(self.outfile_counter)
         logtext = self.OUTFILE.read()
-        # logger.debug('Task.pol: (%s,%s) found %d log characters' % (self.task,self.obs,len(logtext)))
+
         if len(logtext) > self.outfile_counter:
             # logger.debug('Task.pol: ({task},{obsnum}) adding {d} log characeters'.format(task=self.task, obsnum=self.obs, d=len(logtext)))
             logger.debug("Output -> Task : %s, Obsnum: %s, Output: %s" % (self.task, self.obs, logtext))
@@ -139,7 +138,7 @@ class Task:
                 child.kill()
             self.process.kill()
 
-        os.wait()
+        os.wait()  # Might need to think about this one, communicate might be a better option but not sure
 
     def record_launch(self):
         self.dbi.set_obs_pid(self.obs, self.process.pid)
@@ -170,25 +169,31 @@ class TaskClient:
         logger = sg.logger
 
     def transmit(self, task, obs):
+        headers = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain"}
         recieved = ''
         status = ''
+
         args = self.gen_args(task, obs)
+        params = urllib.urlencode({'obsnum': obs, 'task': task, 'args': args, 'env_vars': self.sg.env_vars})
         logger.debug('TaskClient.transmit: sending (%s,%s) with args=%s' % (task, obs, args))
 
-        pkt = to_pkt(task, obs, self.host_port[0], args)
-        # print(self.host_port)
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(5)
+        # pkt = to_pkt(task, obs, self.host_port[0], args)
+
+        # sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # sock.settimeout(5)
         try:  # Attempt to open a socket to a server and send over task instructions
             logger.debug("connecting to TaskServer %s" % self.host_port[0])
             try:
-                sock.connect(self.host_port)
-                sock.sendall(pkt + "\n")
-                recieved = sock.recv(1024)
-            except socket.error, exc:
-                logger.exception("Caught exection trying to contact : %s socket.error : %s" % (self.host_port[0], exc))
+                conn = httplib.HTTPConnection(self.host_port[0], self.host_port[1], timeout=20)
+                #                sock.connect(self.host_port)
+                #                sock.sendall(pkt + "\n")
+                #                recieved = sock.recv(1024)
+                conn.request("POST", "/NEW_TASK", params, headers)
+                response = conn.getresponse()
+            except:
+                logger.exception("Caught exection trying to contact : %s" % (self.host_port[0]))
         finally:
-            sock.close()
+            conn.close()
 
         if recieved != "OK\n":  # Check if we did not recieve an OK that the server accepted the task
             logger.debug("!! We had a problem sending data to %s" % self.host_port[0])
@@ -202,12 +207,11 @@ class TaskClient:
     def gen_args(self, task, obs):
         args = []
         pot, path, basename = self.dbi.get_input_file(obs)  # Jon: Pot I believe is host where file to process is, basename is just the file name
-
         outhost, outpath = self.dbi.get_output_location(obs)
-        # hosts and paths are not used except for ACQUIRE_NEIGHBORS and CLEAN_NEIGHBORS
-        # stillhost, stillpath = self.dbi.get_obs_still_host(obs), self.dbi.get_obs_still_path(obs)
-        stillhost, stillpath = self.dbi.get_obs_still_host(obs), self.dbi.get_still_info(self.host_port[0]).data_dir
 
+        #  These varibles are here to be accessible to the arguments variable in the config file
+        stillhost = self.dbi.get_obs_still_host(obs)
+        stillpath = self.dbi.get_still_info(self.host_port[0]).data_dir
         neighbors = [(self.dbi.get_obs_still_host(n), self.dbi.get_still_info(self.host_port[0]).data_dir) + self.dbi.get_input_file(n)
                      for n in self.dbi.get_neighbors(obs) if n is not None]
 
@@ -228,12 +232,13 @@ class TaskClient:
             return rv
 
         if task != "STILL_KILL_OBS":
-            try:
+            try:  # Jon: Check if we actually have any custom args to process, if not then defaulting is normal behavior and not an exception
                 args = eval(self.wf.action_args[task])
             except:
                 logger.exception("Could not process arguments for task %s please check args for this task in config file, ARGS: %s" % (task, self.wf.action_args))
                 args = [obs]
                 # sys.exit(1)
+
         return args
 
     def tx_kill(self, obs):
@@ -282,17 +287,16 @@ class TaskHandler(BaseHTTPRequestHandler):
             field_item = form[field].value
             print("Field : %s, Form[field]: %s") % (field, field_item)
 
-        if upper(self.path) == "/NEW_TASK":
-            task = form.getfirst("task", "").upper()
-            obsnum = form.getfirst("obsnum", "").upper()
-            still = form.getfirst("still", "").upper()
-            args = form.getfirst("args", "").upper()
-            env_vars = form.getfirst("env_vars", "").upper()
-            logger.info('TaskHandler.handle: received (%s,%s) with args=%s' % (task, obsnum, ' '.join(args)))
+        if upper(self.path) == "/NEW_TASK":                # New task recieved, grab the relavent bits out of the POST
+            task = form.getfirst("task", "")
+            obsnum = form.getfirst("obsnum", "")
+            still = form.getfirst("still", "")
+            args = form.getfirst("args", "").split(' ')
+            env_vars = form.getfirst("env_vars", "")
+            logger.info('TaskHandler.handle: received (%s,%s) with args=%s' % (task, obsnum, ' '.join(args), ' '.join(env_vars)))
 
         if task == 'COMPLETE':
             self.server.dbi.set_obs_status(obsnum, task)
-
         else:
             for active_task in self.server.active_tasks:
                 logger.debug("  Active Task: %s, For Obs: %s" % (active_task.task, active_task.obs))
@@ -312,6 +316,9 @@ class TaskServer(HTTPServer):
     allow_reuse_address = True
 
     def __init__(self, dbi, sg, data_dir='.', port=STILL_PORT, handler=TaskHandler, path_to_do_scripts="."):
+        global logger
+        logger = sg.logger
+
         HTTPServer.__init__(self, (HOSTNAME, port), handler)  # Class us into HTTPServer so we can make calls from TaskHandler into this class via self.server.
         self.active_tasks_semaphore = threading.Semaphore()
         self.active_tasks = []
@@ -323,8 +330,7 @@ class TaskServer(HTTPServer):
         self.port = port
         self.path_to_do_scripts = path_to_do_scripts
         self.logger = sg.logger
-        global logger
-        logger = sg.logger
+
         logger.debug("Path to do_ Scripts : %s" % self.path_to_do_scripts)
         logger.debug("Data_dir : %s" % self.data_dir)
         logger.debug("Port : %s" % self.port)
@@ -341,21 +347,18 @@ class TaskServer(HTTPServer):
         while self.keep_running:
             self.active_tasks_semaphore.acquire()
             new_active_tasks = []
-            for t in self.active_tasks:
-                if t.poll() is None:  # not complete
-                    new_active_tasks.append(t)
+            for mytask in self.active_tasks:
+                if mytask.poll() is None:  # not complete
+                    new_active_tasks.append(mytask)
                     try:
-                        c = t.process.children()[0]
+                        c = mytask.process.children()[0]
                         # Check the affinity!
-                        if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
-                            if len(c.cpu_affinity()) < psutil.cpu_count():
-                                logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%%, mem={mem:.1f}%%, Naffinity={aff}'.format(
-                                    obsnum=t.obs, task=t.task, pid=c.pid, cpu=c.cpu_percent(interval=1.0), mem=c.memory_percent(), aff=len(c.cpu_affinity())))
-                                c.cpu_affinity(range(psutil.cpu_count()))
+                        if PLATFORM != "Darwin" and len(c.cpu_affinity()) < psutil.cpu_count():  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
+                            c.cpu_affinity(range(psutil.cpu_count()))
                     except:
                         continue
                 else:
-                    t.finalize()
+                    mytask.finalize()
             self.active_tasks = new_active_tasks
             self.active_tasks_semaphore.release()
 
@@ -363,12 +366,13 @@ class TaskServer(HTTPServer):
             time.sleep(poll_interval)
             if self.watchdog_count == 30:
                 logger.debug('TaskServer is alive')
-                for t in self.active_tasks:
+                for mytask in self.active_tasks:
                     try:
-                        c = t.process.children()[0]
-                        if psutil.pid_exists(c.pid):
+                        child_proc = mytask.process.children()[0]
+                        if psutil.pid_exists(child_proc.pid):
                             logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%%, mem={mem:.1f}%%, Naffinity={aff}'.format(
-                                obsnum=t.obs, task=t.task, pid=c.pid, cpu=c.cpu_percent(interval=1.0), mem=c.memory_percent(), aff=len(c.cpu_affinity())))
+                                obsnum=mytask.obs, task=mytask.task, pid=child_proc.pid, cpu=child_proc.cpu_percent(interval=1.0),
+                                mem=child_proc.memory_percent(), aff=len(child_proc.cpu_affinity())))
                     except:
                         pass
                 self.watchdog_count = 0
@@ -385,7 +389,6 @@ class TaskServer(HTTPServer):
             for task in self.active_tasks:
                 if task.process.pid == pid:
                     task.kill()
-#                    self.active_tasks.remove(task)  # Remove the killed task from the active task list
                     break
         except:
             logger.exception("Problem killing off task: %s  w/  pid : %s" % (task, pid))
@@ -422,13 +425,11 @@ class TaskServer(HTTPServer):
             # Setup a thread that just updates the last checkin time for this still every 5min
             timer_thread = threading.Thread(target=self.checkin_timer)
             timer_thread.daemon = True  # Make it a daemon so that when ctrl-c happens this thread goes away
-            timer_thread.start()
-            # Start the lisetenser server
-            # self.httpserver = HTTPServer((HOSTNAME, self.port), TaskHandler)
-            self.serve_forever()
-#            self.serve_forever()
+            timer_thread.start()  # Start heartbeat
+            self.serve_forever()  # Start the lisetenser server
         finally:
             self.shutdown()
+        return
 
     def shutdown(self):
         logger.debug("Shutting down task_server")
@@ -444,3 +445,4 @@ class TaskServer(HTTPServer):
             except():
                 pass
         HTTPServer.shutdown(self)
+        sys.exit(0)

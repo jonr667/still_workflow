@@ -62,7 +62,7 @@ class SpawnerClass:
         self.log_path = ''
         self.path_to_do_scripts = ''
         self.logger = ''
-        self.env_vars = []
+        self.env_vars = ''
 
     def preflight_check_scheduler(self):
         # Nothing to do here at the moment, just a place holder
@@ -195,9 +195,10 @@ def process_client_config_file(sg, wf):
         sg.sleep_time = int(get_config_entry(config, 'Still', 'sleep_time', reqd=False, remove_spaces=True))
         sg.log_path = get_config_entry(config, 'Still', 'log_path', reqd=False, remove_spaces=False, default_val=basedir + 'log/')
 
-        if "EnvironmentVars" in config_sections:
-            sg.env_vars = config.items("EnvironmentVars")
-            print(sg.env_vars)
+        if "EnvironmentVars" in config_sections:  # There is probably a better way to do this but it works I suppose.
+            for env_var in config.items("EnvironmentVars"):
+                sg.env_vars += ' ' + str('::'.join(list(env_var)))  # Creates a string of "var1::value var2::value2 var3::value3"
+            sg.env_vars = sg.env_vars[1:]
 
         # Read in all the workflow information
         wf.workflow_actions = tuple(get_config_entry(config, 'WorkFlow', 'actions', reqd=True, remove_spaces=True).split(","))
