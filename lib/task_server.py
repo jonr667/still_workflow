@@ -29,29 +29,6 @@ PLATFORM = platform.system()
 FAIL_ON_ERROR = 0
 
 
-def pad(s, line_len=PKT_LINE_LEN):
-
-    return (s + ' ' * line_len)[:line_len]
-
-
-def to_pkt(task, obs, still, args):
-    nlines = len(args) + 4
-    return ''.join(map(pad, [str(nlines), task, str(obs), still] + args))
-
-
-def from_pkt(pkt, line_len=PKT_LINE_LEN):
-    nlines, pkt = pkt[:line_len].rstrip(), pkt[line_len:]
-    nlines = int(nlines)
-    task, pkt = pkt[:line_len].rstrip(), pkt[line_len:]
-    obs, pkt = int(pkt[:line_len].rstrip()), pkt[line_len:]
-    still, pkt = pkt[:line_len].rstrip(), pkt[line_len:]
-    args = []
-    for i in xrange(nlines - 4):
-        arg, pkt = pkt[:line_len].rstrip(), pkt[line_len:]
-        args.append(arg)
-    return task, obs, still, args
-
-
 class Task:
     def __init__(self, task, obs, still, args, dbi, TaskServer, cwd='.', path_to_do_scripts="."):
         self.task = task
@@ -86,7 +63,7 @@ class Task:
         self.outfile_counter = 0
         try:
             current_env = os.environ
-            full_env = current_env
+            full_env = current_env  # Add obsnum and task to all
             process = psutil.Popen(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args, cwd=self.cwd, env=full_env, stderr=self.OUTFILE, stdout=self.OUTFILE)
             process.nice(2)  # Jon : I want to set all the processes evenly so they don't compete against core OS functionality slowing things down.
             if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
@@ -170,24 +147,17 @@ class TaskClient:
 
     def transmit(self, task, obs):
         headers = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain"}
-        recieved = ''
         status = ''
 
         args = self.gen_args(task, obs)
-        params = urllib.urlencode({'obsnum': obs, 'task': task, 'args': args, 'env_vars': self.sg.env_vars})
-        logger.debug('TaskClient.transmit: sending (%s,%s) with args=%s' % (task, obs, args))
+        args_string = ' '.join(args)
+        params = urllib.urlencode({'obsnum': obs, 'task': task, 'args': args_string, 'env_vars': self.sg.env_vars})
+        logger.debug('TaskClient.transmit: sending (%s,%s) with args=%s' % (task, obs, args_string))
 
-        # pkt = to_pkt(task, obs, self.host_port[0], args)
-
-        # sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # sock.settimeout(5)
         try:  # Attempt to open a socket to a server and send over task instructions
             logger.debug("connecting to TaskServer %s" % self.host_port[0])
             try:
                 conn = httplib.HTTPConnection(self.host_port[0], self.host_port[1], timeout=20)
-                #                sock.connect(self.host_port)
-                #                sock.sendall(pkt + "\n")
-                #                recieved = sock.recv(1024)
                 conn.request("POST", "/NEW_TASK", params, headers)
                 response = conn.getresponse()
             except:
@@ -195,13 +165,14 @@ class TaskClient:
         finally:
             conn.close()
 
-        if recieved != "OK\n":  # Check if we did not recieve an OK that the server accepted the task
+        if response.status != 200:  # Check if we did not recieve 200 OK
             logger.debug("!! We had a problem sending data to %s" % self.host_port[0])
             self.error_count += 1
             logger.debug("Host : %s  has error count :%s" % (self.host_port[0], self.error_count))
             status = "FAILED_TO_CONNECT"
         else:
             status = "OK"
+            logger.debug("Connection status : %s : %s" % (response.status, response.reason))
         return status, self.error_count
 
     def gen_args(self, task, obs):
@@ -250,10 +221,6 @@ class TaskClient:
 
 
 class TaskHandler(BaseHTTPRequestHandler):
-    def get_pkt(self):
-        pkt = self.data
-        task, obsnum, still, args = from_pkt(pkt)
-        return task, obsnum, still, args
 
     def do_GET(self):
         self.send_response(200)  # Return a response of 200, OK to the client
@@ -289,11 +256,11 @@ class TaskHandler(BaseHTTPRequestHandler):
 
         if upper(self.path) == "/NEW_TASK":                # New task recieved, grab the relavent bits out of the POST
             task = form.getfirst("task", "")
-            obsnum = form.getfirst("obsnum", "")
+            obsnum = str(form.getfirst("obsnum", ""))
             still = form.getfirst("still", "")
             args = form.getfirst("args", "").split(' ')
             env_vars = form.getfirst("env_vars", "")
-            logger.info('TaskHandler.handle: received (%s,%s) with args=%s' % (task, obsnum, ' '.join(args), ' '.join(env_vars)))
+            logger.info('TaskHandler.handle: received (%s,%s) with args=%s' % (task, obsnum, ' '.join(args)))  # , ' '.join(env_vars)))
 
         if task == 'COMPLETE':
             self.server.dbi.set_obs_status(obsnum, task)

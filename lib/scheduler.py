@@ -1,14 +1,14 @@
 import time
 import sys
-import logging
+import threading
+
+from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+from SocketServer import ThreadingMixIn
 
 from still_shared import InputThread
 from still_shared import handle_keyboard_input
 from task_server import TaskClient
 # from still_shared import setup_logger
-
-# import datetime
-# from still_shared import logger
 
 #  Setup the lib path ./lib/  as a spot to check for python libraries
 # basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
@@ -100,7 +100,27 @@ class Action:
         return connect_returned
 
 
-class Scheduler:
+class MonitorHandler(BaseHTTPRequestHandler):
+    ###
+    # Handles all incoming requests for the http interface to the monitoring port
+    ###
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        message = ""
+        for still in self.server.launched_actions:
+            print(still)
+            message += still + "\n"
+            for myaction in self.server.launched_actions[still]:
+                message += "   " + myaction.obs + "   " + myaction.task + "\n"
+
+        # message = "Scheduler OK"
+        self.wfile.write(message)
+        self.wfile.write('\n')
+        return
+
+
+class Scheduler(ThreadingMixIn, HTTPServer):
     ###
     # A Scheduler reads a DataBaseInterface to determine what Actions can be
     # taken, and then schedules them on stills according to priority.'''
@@ -109,6 +129,7 @@ class Scheduler:
 
         global logger
         logger = sg.logger
+        HTTPServer.__init__(self, ("127.0.0.1", 8080), MonitorHandler)  # Class us into HTTPServer so we can make calls from TaskHandler into this class via self.server.
         self.sg = sg  # Might as well have it around in case I find I need something from it...  Its just a little memory
         self.nstills = len(sg.hosts)  # preauto
         self.actions_per_still = sg.actions_per_still
@@ -176,6 +197,8 @@ class Scheduler:
         logger.info('Starting Scheduler')
         self.dbi = dbi
         last_checked_for_stills = time.time()
+        logger.info("Starting monitoring interface.")
+        threading.Thread(target=self.serve_forever).start()  # Launch a thread of a multithreaded http server to view information on currently running tasks
 
         while self.keep_running:
 
@@ -209,6 +232,7 @@ class Scheduler:
 
     def shutdown(self):
         print("Shutting down...")
+        HTTPServer.shutdown(self)
         sys.exit(0)
 
     def get_all_neighbors(self, obsnum):
