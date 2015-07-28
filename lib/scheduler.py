@@ -2,6 +2,7 @@ import time
 import sys
 import threading
 import httplib
+import socket
 
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn
