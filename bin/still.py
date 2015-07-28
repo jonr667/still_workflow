@@ -316,7 +316,7 @@ def main():
 
     # Create database interface with SQL Alchemy
 
-    get_dbi_from_config(sg.config_file, SpawnerClass=sg, still_startup=1)
+    get_dbi_from_config(sg.config_file, Spawner=sg, still_startup=1)
 
     if args.client is True:
         start_client(sg, workflow_objects, args)
