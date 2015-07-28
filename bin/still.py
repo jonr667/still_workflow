@@ -225,7 +225,7 @@ def process_client_config_file(sg, wf):
     return 0
 
 
-def get_dbi_from_config(config_file, SpawnerClass=None, still_startup=0):
+def get_dbi_from_config(config_file, Spawner=None, still_startup=0):
 
     if still_startup != 1:
         sg = SpawnerClass()
@@ -233,7 +233,7 @@ def get_dbi_from_config(config_file, SpawnerClass=None, still_startup=0):
         sg.config_file = config_file
         process_client_config_file(sg, wf)
     else:
-        sg = SpawnerClass
+        sg = Spawner
     # Create database interface with SQL Alchemy
     sg.dbi = StillDataBaseInterface(sg.dbhost, sg.dbport, sg.dbtype, sg.dbname, sg.dbuser, sg.dbpasswd, test=False)
     return sg.dbi
