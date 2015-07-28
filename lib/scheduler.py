@@ -3,6 +3,7 @@ import sys
 import threading
 import httplib
 import socket
+import numpy as np
 
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn
@@ -140,16 +141,17 @@ class MonitorHandler(BaseHTTPRequestHandler):
         for still in self.server.launched_actions:
             message += still + "\n"
             data_on_tasks = self.get_from_server(still, "INFO_TASKS")
-            for line in data_on_tasks.split('\n'):
+            for line in data_on_tasks.split('\n'):   # Process each line from the taskmanager relating to its current procs
                 obs_info_dict.update({line.split(':', 1)[0]: str(line)})
-                for myaction in self.server.launched_actions[still]:
-                    try:
-                        message += "   Observation # : " + myaction.obs + " - Current Task : " + myaction.task + \
-                                   " - CPU Usage : " + obs_info_dict[myaction.obs].split(':')[3] + \
-                                   "% - Mem Usage : " + str(int(obs_info_dict[myaction.obs].split(':')[4]) / 1024) + "k" + \
-                                   " - Time : " + obs_info_dict[myaction.obs].split(':')[5] + 's' + "\n"
-                    except:
-                        pass
+
+            for myaction in self.server.launched_actions[still]:
+                try:
+                    message += "   Observation # : " + myaction.obs + " - Current Task : " + myaction.task + \
+                               " - CPU Usage : " + obs_info_dict[myaction.obs].split(':')[3] + \
+                               "% - Mem Usage : " + str(int(obs_info_dict[myaction.obs].split(':')[4]) / 1024) + "k" + \
+                               " - Time : " + obs_info_dict[myaction.obs].split(':')[5] + 's' + "\n"
+                except:
+                    pass
         self.wfile.write(message)
         self.wfile.write('\n')
         return
@@ -201,6 +203,8 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         ###
         logger.debug("looking for stills...")
         self.stills = self.dbi.get_available_stills()
+        print("stills: ")
+        print(self.stills)
         while len(self.stills) < 1:
 
             logger.debug("Can't find any stills! Waiting for 10sec and trying again")
@@ -416,9 +420,13 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             return None  # obs is complete
 
         # Check that the still assigned to the obs is currently in the list of active stills
-        # !!!!FIXME!!!
-        # if any(still for still in self.stills if still.hostname != obsinfo.stillhost) and obsinfo.stillhost is not None:
-        #    return None
+        # !!!!FIXME!!!  - Maybe fixed?
+        if obsinfo.stillhost is not None:
+            if any(still for still in self.stills if still.hostname == obsinfo.stillhost):
+                pass
+            else:
+                print("Rejected")
+                return None
 
         neighbors = self.dbi.get_neighbors(obsnum)
 
