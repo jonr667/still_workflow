@@ -19,6 +19,7 @@ logger = True  # This is just here because the jedi syntax checker is dumb.
 
 MAXFAIL = 5  # Jon : move this into config
 TIME_INT_FOR_STILL_CHECK = 100
+HOSTNAME = socket.gethostname()
 
 
 def action_cmp(x, y):
@@ -161,7 +162,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
 
         global logger
         logger = sg.logger
-        HTTPServer.__init__(self, ("127.0.0.1", 8080), MonitorHandler)  # Class us into HTTPServer so we can make calls from TaskHandler into this class via self.server.
+        HTTPServer.__init__(self, (HOSTNAME, 8080), MonitorHandler)  # Class us into HTTPServer so we can make calls from TaskHandler into this class via self.server.
         self.sg = sg  # Might as well have it around in case I find I need something from it...  Its just a little memory
         self.nstills = len(sg.hosts)  # preauto
         self.actions_per_still = sg.actions_per_still
