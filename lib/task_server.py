@@ -145,34 +145,47 @@ class TaskClient:
         global logger
         logger = sg.logger
 
-    def transmit(self, task, obs):
-        headers = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain"}
+    def transmit(self, task, obs, action_type):
+        conn_headers = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain"}
         status = ''
+        response_status = -1
+        response_reason = "Failed to connect"
+        # respose_data = ""
 
-        args = self.gen_args(task, obs)
-        args_string = ' '.join(args)
-        params = urllib.urlencode({'obsnum': obs, 'task': task, 'args': args_string, 'env_vars': self.sg.env_vars})
-        logger.debug('TaskClient.transmit: sending (%s,%s) with args=%s' % (task, obs, args_string))
+        if action_type == "NEW_TASK":
+            conn_type = "POST"
+            conn_path = "/NEW_TASK"
+            args = self.gen_args(task, obs)
+            args_string = ' '.join(args)
+            conn_params = urllib.urlencode({'obsnum': obs, 'task': task, 'args': args_string, 'env_vars': self.sg.env_vars})
+            logger.debug('TaskClient.transmit: sending (%s,%s) with args=%s' % (task, obs, args_string))
+
+        elif action_type == "KILL_TASK":
+            conn_type = "GET"
+            conn_path = "/KILL_TASK?" + obs
+            conn_params = ""
 
         try:  # Attempt to open a socket to a server and send over task instructions
             logger.debug("connecting to TaskServer %s" % self.host_port[0])
-            try:
-                conn = httplib.HTTPConnection(self.host_port[0], self.host_port[1], timeout=20)
-                conn.request("POST", "/NEW_TASK", params, headers)
-                response = conn.getresponse()
-            except:
-                logger.exception("Caught exection trying to contact : %s" % (self.host_port[0]))
+
+            conn = httplib.HTTPConnection(self.host_port[0], self.host_port[1], timeout=20)
+            conn.request(conn_type, conn_path, conn_params, conn_headers)
+            response = conn.getresponse()
+            response_status = response.status
+            response_reason = response.reason
+            response_data = response.read()
+        except:
+            logger.exception("Could not connect to server %s on port : %s" % (self.host_port[0], self.host_port[1]))
         finally:
             conn.close()
 
-        if response.status != 200:  # Check if we did not recieve 200 OK
-            logger.debug("!! We had a problem sending data to %s" % self.host_port[0])
+        if response_status != 200:  # Check if we did not recieve 200 OK
             self.error_count += 1
-            logger.debug("Host : %s  has error count :%s" % (self.host_port[0], self.error_count))
+            logger.debug("Problem connecting to host : %s  has error count :%s" % (self.host_port[0], self.error_count))
             status = "FAILED_TO_CONNECT"
         else:
             status = "OK"
-            logger.debug("Connection status : %s : %s" % (response.status, response.reason))
+            logger.debug("Connection status : %s : %s" % (response_status, response_reason))
         return status, self.error_count
 
     def gen_args(self, task, obs):
@@ -212,13 +225,6 @@ class TaskClient:
 
         return args
 
-    def tx_kill(self, obs):
-        pid = self.dbi.get_obs_pid(obs)
-        if pid is None:
-            logger.debug('ActionClient.tx_kill: task running on %s is not alive' % obs)
-        else:
-            self.transmit('KILL', obs)
-
 
 class TaskHandler(BaseHTTPRequestHandler):
 
@@ -227,8 +233,7 @@ class TaskHandler(BaseHTTPRequestHandler):
         self.end_headers()
         parsed_path = urlparse.urlparse(self.path)
 
-        print(parsed_path)
-        if upper(parsed_path.path) == "/KILL_OBS":
+        if upper(parsed_path.path) == "/KILL_TASK":
             try:
                 obsnum = str(parsed_path.query)
                 pid_of_obs_to_kill = self.server.dbi.get_obs_pid(obsnum)
@@ -236,10 +241,25 @@ class TaskHandler(BaseHTTPRequestHandler):
                 self.server.kill(pid_of_obs_to_kill)
                 self.send_response(200)  # Return a response of 200, OK to the client
                 self.end_headers()
+                logger.debug("Task killed for obsid: %s" % obsnum)
             except:
                 logger.exception("Could not kill observation, url path called : %s" % self.path)
                 self.send_response(400)  # Return a response of 200, OK to the client
                 self.end_headers()
+        elif upper(parsed_path.path) == "/INFO_TASKS":
+            message = ""
+            for mytask in self.server.active_tasks:
+                try:
+                    child_proc = mytask.process.children()[0]
+                    if psutil.pid_exists(child_proc.pid):
+                        message += mytask.obs + ':' + mytask.task + ':' + str(child_proc.pid) + \
+                            ':' + str(child_proc.cpu_percent(interval=1.0)) + ':' + \
+                            str(child_proc.memory_info_ex()[0]) + ':' + str(child_proc.cpu_times()[0]) + "\n"
+                except:
+                    logger.exception("Trying to send response to INFO request")
+
+            self.wfile.write(message)
+
         return
 
     def do_POST(self):
@@ -249,10 +269,6 @@ class TaskHandler(BaseHTTPRequestHandler):
 
         self.send_response(200)  # Return a response of 200, OK to the client
         self.end_headers()
-
-        for field in form.keys():
-            field_item = form[field].value
-            print("Field : %s, Form[field]: %s") % (field, field_item)
 
         if upper(self.path) == "/NEW_TASK":                # New task recieved, grab the relavent bits out of the POST
             task = form.getfirst("task", "")

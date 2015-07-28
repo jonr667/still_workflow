@@ -1,6 +1,7 @@
 import time
 import sys
 import threading
+import httplib
 
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn
@@ -83,7 +84,7 @@ class Action:
             launch_time = time.time()
         self.launch_time = launch_time
         logger.debug('Action: launching (%s,%s) on still %s' % (self.task, self.obs, self.task_client.host_port[0]))
-        return self.run_remote_task()
+        return self.run_remote_task(action_type="NEW_TASK")
 
     def timed_out(self, curtime=None):
         assert(self.launch_time > 0)  # Error out if action was not launched
@@ -91,12 +92,12 @@ class Action:
             curtime = time.time()
         return curtime > self.launch_time + self.timeout
 
-    def run_remote_task(self, task=""):
+    def run_remote_task(self, task="", action_type=""):
         if task == "":
             task = self.task
 
         logger.debug('Action: task_client(%s,%s)' % (task, self.obs))
-        connect_returned = self.task_client.transmit(task, self.obs)
+        connect_returned = self.task_client.transmit(task, self.obs, action_type)
         return connect_returned
 
 
@@ -104,17 +105,48 @@ class MonitorHandler(BaseHTTPRequestHandler):
     ###
     # Handles all incoming requests for the http interface to the monitoring port
     ###
+
+    def get_from_server(self, still, data_type):
+
+        if data_type == "INFO_TASKS":
+            conn_type = "GET"
+            conn_path = "/INFO_TASKS"
+            conn_params = ""
+            response_data = ""
+        try:  # Attempt to open a socket to a server and send over task instructions
+            still_info = self.server.dbi.get_still_info(still)
+            logger.debug("connecting to TaskServer %s" % still_info.ip_addr)
+
+            conn = httplib.HTTPConnection(still_info.ip_addr, still_info.port, timeout=20)
+            conn.request(conn_type, conn_path)
+            response = conn.getresponse()
+            response_status = response.status
+            response_reason = response.reason
+            response_data = response.read()
+        except:
+            logger.exception("Could not connect to server %s on port : %s" % (still_info.ip_addr, still_info.port))
+        finally:
+            conn.close()
+        return response_data
+
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
         message = ""
-        for still in self.server.launched_actions:
-            print(still)
-            message += still + "\n"
-            for myaction in self.server.launched_actions[still]:
-                message += "   " + myaction.obs + "   " + myaction.task + "\n"
+        obs_info_dict = {}
 
-        # message = "Scheduler OK"
+        for still in self.server.launched_actions:
+
+            message += still + "\n"
+            data_on_tasks = self.get_from_server(still, "INFO_TASKS")
+            for line in data_on_tasks.split('\n'):
+                obs_info_dict.update({line.split(':', 1)[0]: str(line)})
+            for myaction in self.server.launched_actions[still]:
+                message += "   Observation # : " + myaction.obs + " - Current Task : " + myaction.task + \
+                           " - CPU Usage : " + obs_info_dict[myaction.obs].split(':')[3] + \
+                           "% - Mem Usage : " + str(int(obs_info_dict[myaction.obs].split(':')[4]) / 1024) + "k" + \
+                           " - Time : " + obs_info_dict[myaction.obs].split(':')[5] + 's' + "\n"
+
         self.wfile.write(message)
         self.wfile.write('\n')
         return
@@ -231,7 +263,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         self.shutdown()
 
     def shutdown(self):
-        print("Shutting down...")
+        logger.info("Shutting down...")
         HTTPServer.shutdown(self)
         sys.exit(0)
 
@@ -273,7 +305,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
 
     def kill_action(self, a):
         logger.info('Scheduler.kill_action: called on (%s,%s)' % (a.task, a.obs))
-        connect_returned = a.run_remote_task(task="STILL_KILL_OBS")
+        connect_returned = a.run_remote_task(action_type="KILL_TASK")
         if connect_returned == "FAILED_TO_CONNECT":
             logger.debug("We had an issue connecting to still : %s to kill task: %s for obsnum : %s" % (a.still, a.task, a.obs))
             return 1
@@ -440,7 +472,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                 return 0
         else:
             still = self.dbi.get_most_available_still()
-            print("Still : %s") % still
+
             while not still:
                 logger.info("Can't find any available still servers, they are all above 80% usage or have gone offline.  Waiting...")
                 time.sleep(10)
