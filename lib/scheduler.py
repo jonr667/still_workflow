@@ -138,17 +138,18 @@ class MonitorHandler(BaseHTTPRequestHandler):
         obs_info_dict = {}
 
         for still in self.server.launched_actions:
-
             message += still + "\n"
             data_on_tasks = self.get_from_server(still, "INFO_TASKS")
             for line in data_on_tasks.split('\n'):
                 obs_info_dict.update({line.split(':', 1)[0]: str(line)})
-            for myaction in self.server.launched_actions[still]:
-                message += "   Observation # : " + myaction.obs + " - Current Task : " + myaction.task + \
-                           " - CPU Usage : " + obs_info_dict[myaction.obs].split(':')[3] + \
-                           "% - Mem Usage : " + str(int(obs_info_dict[myaction.obs].split(':')[4]) / 1024) + "k" + \
-                           " - Time : " + obs_info_dict[myaction.obs].split(':')[5] + 's' + "\n"
-
+                for myaction in self.server.launched_actions[still]:
+                    try:
+                        message += "   Observation # : " + myaction.obs + " - Current Task : " + myaction.task + \
+                                   " - CPU Usage : " + obs_info_dict[myaction.obs].split(':')[3] + \
+                                   "% - Mem Usage : " + str(int(obs_info_dict[myaction.obs].split(':')[4]) / 1024) + "k" + \
+                                   " - Time : " + obs_info_dict[myaction.obs].split(':')[5] + 's' + "\n"
+                    except:
+                        pass
         self.wfile.write(message)
         self.wfile.write('\n')
         return
