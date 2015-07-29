@@ -3,7 +3,8 @@ import sys
 import threading
 import httplib
 import socket
-import numpy as np
+import datetime
+# import numpy as np
 
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn
@@ -21,7 +22,6 @@ logger = True  # This is just here because the jedi syntax checker is dumb.
 
 MAXFAIL = 5  # Jon : move this into config
 TIME_INT_FOR_STILL_CHECK = 100
-
 
 
 def action_cmp(x, y):
@@ -200,20 +200,19 @@ class Scheduler(ThreadingMixIn, HTTPServer):
     def find_all_stills(self):
         ###
         # find_all_stills : Check the database for all available stills with status OK
+        #  Should also remove stills that have gone offline.
         ###
-        logger.debug("looking for stills...")
+        logger.debug("looking for TaskManagers...")
         self.stills = self.dbi.get_available_stills()
-        print("stills: ")
-        print(self.stills)
         while len(self.stills) < 1:
 
-            logger.debug("Can't find any stills! Waiting for 10sec and trying again")
+            logger.debug("Can't find any TaskManagers! Waiting for 10sec and trying again")
             time.sleep(10)
             self.stills = self.dbi.get_available_stills()
 
         for still in self.stills:
             if still.hostname not in self.task_clients:
-                logger.debug("Discovery of new still : %s" % still.hostname)
+                logger.debug("Discovery of new TaskManager : %s" % still.hostname)
                 self.task_clients[still.hostname] = TaskClient(self.dbi, still.hostname, self.wf, still.port, self.sg)
                 self.launched_actions[still.hostname] = []
 
@@ -253,6 +252,16 @@ class Scheduler(ThreadingMixIn, HTTPServer):
 
             # Launch actions that can be scheduled
             for still in self.launched_actions:
+                still_info = self.dbi.get_still_info(still)
+                since = datetime.datetime.now() - datetime.timedelta(minutes=3)
+
+                if still_info.status != "OK" or still_info.last_checkin < since:
+                    # We have a problem in that the still is no longer here, we should remove it.
+                    logger.info("Removing offline TaskManager : %s" % still_info.hostname)
+                    self.launched_actions.pop(still_info.hostname, None)
+                    self.task_clients.pop(still_info.hostname, None)
+                    break
+
                 while len(self.get_launched_actions(still, tx=False)) < self.actions_per_still:
                     action_from_queue = self.pop_action_queue(still, tx=False)
                     if action_from_queue is not False:
@@ -386,7 +395,8 @@ class Scheduler(ThreadingMixIn, HTTPServer):
 
         actions = []
         for myobs in self.active_obs:
-            if self.dbi.get_obs(myobs).current_stage_in_progress == "FAILED" or self.dbi.get_obs(myobs).current_stage_in_progress == "COMPLETE":
+            myobs_info = self.dbi.get_obs(myobs)
+            if myobs_info.current_stage_in_progress == "FAILED" or myobs_info.status == "COMPLETE" or myobs_info.stillhost not in self.task_clients:
                 self.active_obs.remove(myobs)
             else:
                 myaction = self.get_action(myobs, ActionClass=ActionClass, action_args=action_args)

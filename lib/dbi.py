@@ -56,16 +56,6 @@ def jdpol2obsnum(jd, pol, djd):
     return int(obsint + polnum * (2 ** 32))
 
 
-# def updateobsnum(context):
-#    """
-#    helper function for Observation sqlalchemy object.
-#    used to calculate the obsnum on creation of the record
-#    """
-#    return jdpol2obsnum(context.current_parameters['date'],
-#                        context.current_parameters['pol'],
-#                        context.current_parameters['length'])
-
-
 #############
 #
 #   The basic definition of our database
@@ -148,6 +138,8 @@ class Still(Base):
     number_of_cores = Column(Integer)  # Jon : Placeholder for future expansion
     free_memory = Column(Integer)      # Jon : Placeholder for future expansion
     total_memory = Column(Integer)     # Jon : Placeholder for future expansion
+    cur_num_of_tasks = Column(Integer)
+    max_num_of_tasks = Column(Integer)
 
 
 class DataBaseInterface(object):
@@ -571,7 +563,7 @@ class DataBaseInterface(object):
         s.close()
         return still
 
-    def still_checkin(self, hostname, ip_addr, port, load, data_dir, status="OK"):
+    def still_checkin(self, hostname, ip_addr, port, load, data_dir, status="OK", max_tasks=2, cur_tasks=0):
         ###
         # still_checkin : Check to see if the still entry already exists in the database, if it does update the timestamp, port, data_dir, and load.
         #                 If does not exist then go ahead and create an entry.
@@ -585,9 +577,11 @@ class DataBaseInterface(object):
             still.current_load = load
             still.data_dir = data_dir
             still.port = port
+            still.max_num_of_tasks = max_tasks
+            still.cur_num_of_tasks = cur_tasks
             s.add(still)
         else:  # Still doesn't exist, lets add it
-            still = Still(hostname=hostname, ip_addr=ip_addr, port=port, current_load=load, data_dir=data_dir, status=status)
+            still = Still(hostname=hostname, ip_addr=ip_addr, port=port, current_load=load, data_dir=data_dir, status=status, max_num_of_tasks=max_tasks, cur_num_of_tasks=cur_tasks)
             s.add(still)
 
         s.commit()

@@ -389,9 +389,8 @@ class TaskServer(HTTPServer):
             hostname = socket.gethostname()
             ip_addr = socket.gethostbyname(hostname)
             cpu_usage = psutil.cpu_percent()
-
-            self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), self.data_dir, status="OK")
-            time.sleep(60)
+            self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), self.data_dir, status="OK", max_tasks=self.sg.actions_per_still, cur_tasks=len(self.active_tasks))
+            time.sleep(10)
         return 0
 
     def start(self):
