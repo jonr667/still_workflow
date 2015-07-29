@@ -4,6 +4,8 @@ import threading
 import httplib
 import socket
 import datetime
+import signal
+
 # import numpy as np
 
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
@@ -21,7 +23,7 @@ from task_server import TaskClient
 logger = True  # This is just here because the jedi syntax checker is dumb.
 
 MAXFAIL = 5  # Jon : move this into config
-TIME_INT_FOR_STILL_CHECK = 100
+TIME_INT_FOR_STILL_CHECK = 20
 
 
 def action_cmp(x, y):
@@ -167,6 +169,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         global logger
         logger = sg.logger
         HOSTNAME = socket.gethostname()
+
         HTTPServer.__init__(self, (HOSTNAME, 8080), MonitorHandler)  # Class us into HTTPServer so we can make calls from TaskHandler into this class via self.server.
         self.sg = sg  # Might as well have it around in case I find I need something from it...  Its just a little memory
         self.nstills = len(sg.hosts)  # preauto
@@ -178,7 +181,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
 
         self.lock_all_neighbors_to_same_still = workflow.lock_all_neighbors_to_same_still
         self.active_obs = []
-        self._active_obs_dict = {}
+        self.active_obs_dict = {}
         self.action_queue = []
         self.dbi = sg.dbi
         self.launched_actions = {}
@@ -188,6 +191,9 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         self.wf = workflow  # Jon: Moved the workflow class to instantiated on object creation, should do the same for dbi probably
         self.task_clients = {}
         self.stills = []
+
+        logger.info("Starting monitoring interface.")
+        threading.Thread(target=self.serve_forever).start()  # Launch a thread of a multithreaded http server to view information on currently running tasks
 
         # If task_clients is set to AUTO then check the db for still servers
         if task_clients[0].host_port[0] == "AUTO":
@@ -226,6 +232,17 @@ class Scheduler(ThreadingMixIn, HTTPServer):
     def ext_command_hook(self):
         return
 
+    def remove_taskmanager(self, tm_info):
+        logger.info("Removing offline TaskManager : %s" % tm_info.hostname)
+        self.launched_actions.pop(tm_info.hostname, None)
+        self.task_clients.pop(tm_info.hostname, None)
+        for obsnum in self.dbi.get_obs_assigned_to_still(tm_info.hostname):
+            if obsnum in self.active_obs_dict:
+                self.active_obs_dict.pop(obsnum)
+                self.active_obs.remove(obsnum)
+
+        return
+
     def start(self, dbi, ActionClass=None, action_args=()):
         '''Begin scheduling (blocking).
         dbi: DataBaseInterface'''
@@ -236,8 +253,6 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         logger.info('Starting Scheduler')
         self.dbi = dbi
         last_checked_for_stills = time.time()
-        logger.info("Starting monitoring interface.")
-        threading.Thread(target=self.serve_forever).start()  # Launch a thread of a multithreaded http server to view information on currently running tasks
 
         while self.keep_running:
 
@@ -256,10 +271,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                 since = datetime.datetime.now() - datetime.timedelta(minutes=3)
 
                 if still_info.status != "OK" or still_info.last_checkin < since:
-                    # We have a problem in that the still is no longer here, we should remove it.
-                    logger.info("Removing offline TaskManager : %s" % still_info.hostname)
-                    self.launched_actions.pop(still_info.hostname, None)
-                    self.task_clients.pop(still_info.hostname, None)
+                    self.remove_taskmanager(still_info)
                     break
 
                 while len(self.get_launched_actions(still, tx=False)) < self.actions_per_still:
@@ -383,8 +395,8 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         observations = self.dbi.list_open_observations()  # Get only observations that are NOT :  NEW OR COMPLETE
 
         for open_obs in observations:
-            if open_obs not in self._active_obs_dict:
-                self._active_obs_dict[open_obs] = len(self.active_obs)
+            if open_obs not in self.active_obs_dict:
+                self.active_obs_dict[open_obs] = len(self.active_obs)
                 self.active_obs.append(open_obs)
         return
 

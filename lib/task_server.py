@@ -106,7 +106,6 @@ class Task:
             self.record_completion()
 
     def kill(self):
-        # myproc = psutil.Process(pid=self.process.pid)
         self.record_failure(failure_type="KILLED")
         if self.process.pid:
             logger.debug('Task.kill Trying to kill: ({task},{obsnum}) pid={pid}'.format(task=self.task, obsnum=self.obs, pid=self.process.pid))
@@ -421,10 +420,15 @@ class TaskServer(HTTPServer):
         self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), self.data_dir, status="OFFLINE")
 
         self.keep_running = False
-        for t in self.active_tasks:
-            try:
-                t.process.kill()
-            except():
-                pass
+        parentproc = psutil.Process()
+        myprocs = parentproc.children(recursive=True)
+        for proc in myprocs:
+            logger.debug("Killing nicely -> Pid: %s - Proc: %s" % (proc.pid, proc.name))
+            proc.terminate()
+        gone, alive = psutil.wait_procs(myprocs, timeout=3)
+        for proc in alive:
+            logger.debug("Killing with gusto -> Pid: %s - Proc: %s" % (proc.pid, proc.name))
+            proc.kill()
+
         HTTPServer.shutdown(self)
         sys.exit(0)
