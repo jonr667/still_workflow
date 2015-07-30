@@ -21,12 +21,8 @@ from still_shared import handle_keyboard_input
 
 logger = True  # This is just here because the jedi syntax checker is dumb.
 
-HOSTNAME = socket.gethostname()
-
-PKT_LINE_LEN = 160
-STILL_PORT = 14204
 PLATFORM = platform.system()
-FAIL_ON_ERROR = 0
+FAIL_ON_ERROR = 1
 
 
 class Task:
@@ -61,23 +57,28 @@ class Task:
         # create a temp file descriptor for stdout and stderr
         self.OUTFILE = tempfile.TemporaryFile()
         self.outfile_counter = 0
+
+        current_env = os.environ
+        full_env = current_env  # Add obsnum and task to all
         try:
-            current_env = os.environ
-            full_env = current_env  # Add obsnum and task to all
             process = psutil.Popen(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args, cwd=self.cwd, env=full_env, stderr=self.OUTFILE, stdout=self.OUTFILE)
-            process.nice(2)  # Jon : I want to set all the processes evenly so they don't compete against core OS functionality slowing things down.
-            if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
-                process.cpu_affinity(range(psutil.cpu_count()))
-
-            self.dbi.update_obs_current_stage(self.obs, self.task)
-            self.dbi.add_log(self.obs, self.task, ' '.join(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args + ['\n']), None)
-
         except Exception:
             logger.exception('Task._run: (%s,%s) error="%s"' % (self.task, self.obs, ' '.join(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args)))
             self.record_failure()
             if FAIL_ON_ERROR == 1:
                 self.ts.shutdown()
+        try:
+            process.nice(2)  # Jon : I want to set all the processes evenly so they don't compete against core OS functionality slowing things down.
+            if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
+                process.cpu_affinity(range(psutil.cpu_count()))
+        except:
+            logger.exception("Could not set cpu affinity")
 
+        try:
+            self.dbi.update_obs_current_stage(self.obs, self.task)
+            self.dbi.add_log(self.obs, self.task, ' '.join(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args + ['\n']), None)
+        except:
+            logger.exception("Could not update database")
         return process
 
     def poll(self):
@@ -100,7 +101,7 @@ class Task:
 
         logger.debug('Task.finalize closing out log: ({task},{obsnum})'.format(task=self.task, obsnum=self.obs))
         self.dbi.update_log(self.obs, exit_status=self.process.poll())
-        if self.poll():
+        if self.poll():  # Will return the exit status
             self.record_failure()
         else:
             self.record_completion()
@@ -174,7 +175,8 @@ class TaskClient:
             response_reason = response.reason
             response_data = response.read()
         except:
-            logger.exception("Could not connect to server %s on port : %s" % (self.host_port[0], self.host_port[1]))
+            logger.exception("Could not connect to server %s on port : %s, marking OFFLINE" % (self.host_port[0], self.host_port[1]))
+            self.dbi.mark_still_offline(self.host_port[0])  # If we can't connect to the taskmanager just mark it as offline
         finally:
             conn.close()
 
@@ -297,11 +299,11 @@ class TaskHandler(BaseHTTPRequestHandler):
 class TaskServer(HTTPServer):
     allow_reuse_address = True
 
-    def __init__(self, dbi, sg, data_dir='.', port=STILL_PORT, handler=TaskHandler, path_to_do_scripts="."):
+    def __init__(self, dbi, sg, data_dir='.', port=14204, handler=TaskHandler, path_to_do_scripts="."):
         global logger
         logger = sg.logger
-
-        HTTPServer.__init__(self, (HOSTNAME, port), handler)  # Class us into HTTPServer so we can make calls from TaskHandler into this class via self.server.
+        self.myhostname = socket.gethostname()
+        self.httpd = HTTPServer.__init__(self, (self.myhostname, port), handler)  # Class us into HTTPServer so we can make calls from TaskHandler into this class via self.server.
         self.active_tasks_semaphore = threading.Semaphore()
         self.active_tasks = []
         self.dbi = dbi
@@ -312,6 +314,8 @@ class TaskServer(HTTPServer):
         self.port = port
         self.path_to_do_scripts = path_to_do_scripts
         self.logger = sg.logger
+
+        # signal.signal(signal.SIGINT, self.signal_handler)  # Enabled clean shutdown after Cntrl-C event.
 
         logger.debug("Path to do_ Scripts : %s" % self.path_to_do_scripts)
         logger.debug("Data_dir : %s" % self.data_dir)
@@ -418,7 +422,6 @@ class TaskServer(HTTPServer):
         ip_addr = socket.gethostbyname(hostname)
         cpu_usage = psutil.cpu_percent()
         self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), self.data_dir, status="OFFLINE")
-
         self.keep_running = False
         parentproc = psutil.Process()
         myprocs = parentproc.children(recursive=True)
@@ -429,6 +432,5 @@ class TaskServer(HTTPServer):
         for proc in alive:
             logger.debug("Killing with gusto -> Pid: %s - Proc: %s" % (proc.pid, proc.name))
             proc.kill()
-
         HTTPServer.shutdown(self)
         sys.exit(0)

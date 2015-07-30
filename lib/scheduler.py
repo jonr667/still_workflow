@@ -2,12 +2,14 @@ import time
 import sys
 import threading
 import httplib
+import urllib
+import urlparse
 import socket
 import datetime
 import signal
 
 # import numpy as np
-
+from itertools import cycle
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn
 
@@ -23,7 +25,7 @@ from task_server import TaskClient
 logger = True  # This is just here because the jedi syntax checker is dumb.
 
 MAXFAIL = 5  # Jon : move this into config
-TIME_INT_FOR_STILL_CHECK = 20
+TIME_INT_FOR_NEW_TM_CHECK = 90
 
 
 def action_cmp(x, y):
@@ -102,8 +104,8 @@ class Action:
             task = self.task
 
         logger.debug('Action: task_client(%s,%s)' % (task, self.obs))
-        connect_returned = self.task_client.transmit(task, self.obs, action_type)
-        return connect_returned
+        connection_status = self.task_client.transmit(task, self.obs, action_type)
+        return connection_status
 
 
 class MonitorHandler(BaseHTTPRequestHandler):
@@ -119,43 +121,47 @@ class MonitorHandler(BaseHTTPRequestHandler):
             conn_params = ""
             response_data = ""
         try:  # Attempt to open a socket to a server and send over task instructions
-            still_info = self.server.dbi.get_still_info(still)
-            logger.debug("connecting to TaskServer %s" % still_info.ip_addr)
+            tm_info = self.server.dbi.get_still_info(still)
+            logger.debug("connecting to TaskServer %s" % tm_info.ip_addr)
 
-            conn = httplib.HTTPConnection(still_info.ip_addr, still_info.port, timeout=20)
+            conn = httplib.HTTPConnection(tm_info.ip_addr, tm_info.port, timeout=20)
             conn.request(conn_type, conn_path)
             response = conn.getresponse()
             response_status = response.status
             response_reason = response.reason
             response_data = response.read()
         except:
-            logger.exception("Could not connect to server %s on port : %s" % (still_info.ip_addr, still_info.port))
+            logger.exception("Could not connect to server %s on port : %s" % (tm_info.ip_addr, tm_info.port))
         finally:
             conn.close()
         return response_data
 
     def do_GET(self):
+        parsed_path = urlparse.urlparse(self.path)
         self.send_response(200)
         self.end_headers()
-        message = ""
-        obs_info_dict = {}
 
-        for still in self.server.launched_actions:
-            message += still + "\n"
-            data_on_tasks = self.get_from_server(still, "INFO_TASKS")
-            for line in data_on_tasks.split('\n'):   # Process each line from the taskmanager relating to its current procs
-                obs_info_dict.update({line.split(':', 1)[0]: str(line)})
+        if parsed_path.path == "/":
 
-            for myaction in self.server.launched_actions[still]:
-                try:
-                    message += "   Observation # : " + myaction.obs + " - Current Task : " + myaction.task + \
-                               " - CPU Usage : " + obs_info_dict[myaction.obs].split(':')[3] + \
-                               "% - Mem Usage : " + str(int(obs_info_dict[myaction.obs].split(':')[4]) / 1024) + "k" + \
-                               " - Time : " + obs_info_dict[myaction.obs].split(':')[5] + 's' + "\n"
-                except:
-                    pass
-        self.wfile.write(message)
-        self.wfile.write('\n')
+            message = ""
+            obs_info_dict = {}
+
+            for still in self.server.launched_actions:
+                message += still + "\n"
+                data_on_tasks = self.get_from_server(still, "INFO_TASKS")
+                for line in data_on_tasks.split('\n'):   # Process each line from the taskmanager relating to its current procs
+                    obs_info_dict.update({line.split(':', 1)[0]: str(line)})
+
+                for myaction in self.server.launched_actions[still]:
+                    try:
+                        message += "   Observation # : " + myaction.obs + " - Current Task : " + myaction.task + \
+                                   " - CPU Usage : " + obs_info_dict[myaction.obs].split(':')[3] + \
+                                   "% - Mem Usage : " + str(int(obs_info_dict[myaction.obs].split(':')[4]) / 1024) + "k" + \
+                                   " - Time : " + obs_info_dict[myaction.obs].split(':')[5] + 's' + "\n"
+                    except:
+                        pass
+            self.wfile.write(message)
+            self.wfile.write('\n')
         return
 
 
@@ -168,9 +174,9 @@ class Scheduler(ThreadingMixIn, HTTPServer):
 
         global logger
         logger = sg.logger
-        HOSTNAME = socket.gethostname()
+        self.myhostname = socket.gethostname()
 
-        HTTPServer.__init__(self, (HOSTNAME, 8080), MonitorHandler)  # Class us into HTTPServer so we can make calls from TaskHandler into this class via self.server.
+        HTTPServer.__init__(self, (self.myhostname, 8080), MonitorHandler)  # Class us into HTTPServer so we can make calls from TaskHandler into this class via self.server.
         self.sg = sg  # Might as well have it around in case I find I need something from it...  Its just a little memory
         self.nstills = len(sg.hosts)  # preauto
         self.actions_per_still = sg.actions_per_still
@@ -192,26 +198,31 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         self.task_clients = {}
         self.stills = []
 
+        signal.signal(signal.SIGINT, self.signal_handler)  # Enabled clean shutdown after Cntrl-C event.
+
         logger.info("Starting monitoring interface.")
         threading.Thread(target=self.serve_forever).start()  # Launch a thread of a multithreaded http server to view information on currently running tasks
 
         # If task_clients is set to AUTO then check the db for still servers
         if task_clients[0].host_port[0] == "AUTO":
-            self.find_all_stills()
+            self.find_all_taskmanagers()
             self.auto = 1
         else:
             self.auto = 0
             self.task_clients = task_clients
 
-    def find_all_stills(self):
+    def signal_handler(self, signum, frame):
+        logger.info("Caught Ctrl-C, Initiating clean shutdown.")
+        self.shutdown()
+
+    def find_all_taskmanagers(self):
         ###
-        # find_all_stills : Check the database for all available stills with status OK
+        # find_all_taskmanagers : Check the database for all available stills with status OK
         #  Should also remove stills that have gone offline.
         ###
         logger.debug("looking for TaskManagers...")
         self.stills = self.dbi.get_available_stills()
         while len(self.stills) < 1:
-
             logger.debug("Can't find any TaskManagers! Waiting for 10sec and trying again")
             time.sleep(10)
             self.stills = self.dbi.get_available_stills()
@@ -221,34 +232,38 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                 logger.debug("Discovery of new TaskManager : %s" % still.hostname)
                 self.task_clients[still.hostname] = TaskClient(self.dbi, still.hostname, self.wf, still.port, self.sg)
                 self.launched_actions[still.hostname] = []
-
-        # Need to also remove stills that go away...
-
         return
-
-    def quit(self):
-        self.keep_running = False
 
     def ext_command_hook(self):
         return
 
-    def remove_taskmanager(self, tm_info):
-        logger.info("Removing offline TaskManager : %s" % tm_info.hostname)
-        self.launched_actions.pop(tm_info.hostname, None)
-        self.task_clients.pop(tm_info.hostname, None)
-        for obsnum in self.dbi.get_obs_assigned_to_still(tm_info.hostname):
-            if obsnum in self.active_obs_dict:
-                self.active_obs_dict.pop(obsnum)
-                self.active_obs.remove(obsnum)
+    def check_taskmanager(self, tm):
+        tm_info = self.dbi.get_still_info(tm)
+        since = datetime.datetime.now() - datetime.timedelta(minutes=3)
+        if tm_info.status != "OK" or tm_info.last_checkin < since:  # Status not OK or hasn't checked-in in over 3min.
+            logger.info("Removing offline TaskManager : %s" % tm_info.hostname)
+            self.launched_actions.pop(tm_info.hostname, None)
+            self.task_clients.pop(tm_info.hostname, None)
+            for obsnum in self.dbi.get_obs_assigned_to_still(tm_info.hostname):
+                if obsnum in self.active_obs_dict:
+                    self.active_obs_dict.pop(obsnum)
+                    self.active_obs.remove(obsnum)
+            return False
 
-        return
+        elif tm_info.cur_num_of_tasks >= tm_info.max_num_of_tasks:  # Check to ensure we are not at max # of tasks for the taskmanager
+            return False
+
+        return True
 
     def start(self, dbi, ActionClass=None, action_args=()):
-        '''Begin scheduling (blocking).
-        dbi: DataBaseInterface'''
+        ###
+        #  Start scheduler, loop forever and handle checking for new obsid's, new/removed taskmanagers etc..
+        #      This loop can be terminated by q + Enter, and paused by p + enter
+        ###
         self.user_input = InputThread()
         self.user_input.start()
-
+        self.initial_startup = True  # The scheduler is just starting, for the first run if we have new obs we need this to assign to proper taskmanagers
+        self.tm_cycle = cycle(self.stills)
         self.keep_running = True
         logger.info('Starting Scheduler')
         self.dbi = dbi
@@ -256,8 +271,8 @@ class Scheduler(ThreadingMixIn, HTTPServer):
 
         while self.keep_running:
 
-            if (time.time() - last_checked_for_stills) > TIME_INT_FOR_STILL_CHECK:
-                self.find_all_stills()
+            if (time.time() - last_checked_for_stills) > TIME_INT_FOR_NEW_TM_CHECK:
+                self.find_all_taskmanagers()
                 last_checked_for_stills = time.time()
                 logger.debug("Number of stills : %s" % len(self.task_clients))
 
@@ -266,20 +281,17 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             self.update_action_queue(ActionClass, action_args)
 
             # Launch actions that can be scheduled
-            for still in self.launched_actions:
-                still_info = self.dbi.get_still_info(still)
-                since = datetime.datetime.now() - datetime.timedelta(minutes=3)
-
-                if still_info.status != "OK" or still_info.last_checkin < since:
-                    self.remove_taskmanager(still_info)
+            for tm in self.launched_actions:
+                if self.check_taskmanager(tm) is False:  # Check if the TaskManager is still available, if not it will pop it out
                     break
 
-                while len(self.get_launched_actions(still, tx=False)) < self.actions_per_still:
-                    action_from_queue = self.pop_action_queue(still, tx=False)
+                while len(self.get_launched_actions(tm, tx=False)) < self.actions_per_still:
+                    action_from_queue = self.pop_action_queue(tm, tx=False)
                     if action_from_queue is not False:
-                        self.launch_action(action_from_queue)
+                        if self.launch_action(action_from_queue) != "OK":  # If we had a connection error stop trying until TM checks back in
+                            break
                     else:
-                        logger.info("No actions available for still : %s" % still)
+                        logger.info("No actions available for still : %s" % tm)
                         break  # move on to next still
 
             self.clean_completed_actions(self.dbi)
@@ -289,6 +301,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                 handle_keyboard_input(self, keyboard_input)
             else:
                 time.sleep(self.sleep_time)
+            self.initial_startup = False  # We've run once now, all obs were assigned via roundrobin if they were not previously
         self.shutdown()
 
     def shutdown(self):
@@ -330,16 +343,13 @@ class Scheduler(ThreadingMixIn, HTTPServer):
     def launch_action(self, a):
         '''Launch the specified Action and record its launch for tracking later.'''
         self.launched_actions[a.still].append(a)
-        a.launch()
+        connection_status = a.launch()
+        return connection_status
 
     def kill_action(self, a):
         logger.info('Scheduler.kill_action: called on (%s,%s)' % (a.task, a.obs))
-        connect_returned = a.run_remote_task(action_type="KILL_TASK")
-        if connect_returned == "FAILED_TO_CONNECT":
-            logger.debug("We had an issue connecting to still : %s to kill task: %s for obsnum : %s" % (a.still, a.task, a.obs))
-            return 1
-        else:
-            return 0
+        connection_status = a.run_remote_task(action_type="KILL_TASK")
+        return connection_status
 
     def clean_completed_actions(self, dbi):
         '''Check launched actions for completion, timeout or fail'''
@@ -362,7 +372,8 @@ class Scheduler(ThreadingMixIn, HTTPServer):
 
                 elif action.timed_out():
                     logger.info('Task %s for obs %s on still %s TIMED OUT.' % (action.task, action.obs, still))
-                    self.kill_action(action)
+                    if self.kill_action(action) != "OK":
+                        break
                     self.failcount[str(action.obs) + status] += 1
                     # XXX make db entry for documentation
 
@@ -408,7 +419,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         actions = []
         for myobs in self.active_obs:
             myobs_info = self.dbi.get_obs(myobs)
-            if myobs_info.current_stage_in_progress == "FAILED" or myobs_info.status == "COMPLETE" or myobs_info.stillhost not in self.task_clients:
+            if myobs_info.current_stage_in_progress == "FAILED" or myobs_info.status == "COMPLETE" or (myobs_info.stillhost not in self.task_clients and myobs_info.stillhost):
                 self.active_obs.remove(myobs)
             else:
                 myaction = self.get_action(myobs, ActionClass=ActionClass, action_args=action_args)
@@ -417,7 +428,6 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                         myaction.set_priority(self.determine_priority(myaction))
 
                     actions.append(myaction)
-                    #logger.debug("Actions - obs: %s : task: %s" % (myaction.obs, myaction.task))
 
         actions.sort(action_cmp, reverse=True)  # place most important actions first
         self.action_queue = actions  # completely throw out previous action list
@@ -464,7 +474,10 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         still = self.dbi.get_obs_still_host(obsnum)
 
         if not still:
-            still = self.obs_to_still(obsnum)  # Get a still for a new obsid if one doesn't already exist.
+            if self.initial_startup is True:
+                still = self.tm_cycle.next().hostname  # Balance out all the nodes on startup
+            else:
+                still = self.obs_to_still(obsnum)  # Get a still for a new obsid if one doesn't already exist.
             if self.lock_all_neighbors_to_same_still == 1:
                 for neighbor in self.get_all_neighbors(obsnum):
                     self.dbi.set_obs_still_host(neighbor, still)

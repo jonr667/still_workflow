@@ -149,6 +149,7 @@ class DataBaseInterface(object):
          or
         create a FALSE database
         """
+
         if test:
             self.engine = create_engine('sqlite:///', connect_args={'check_same_thread': False}, poolclass=StaticPool)
             self.createdb()
@@ -587,6 +588,14 @@ class DataBaseInterface(object):
         s.commit()
         s.close()
         return 0
+
+    def mark_still_offline(self, hostname):
+        s = self.Session()
+        still = s.query(Still).filter(Still.hostname == hostname).one()
+        still.status = "OFFLINE"
+        s.add(still)
+        s.commit()
+        s.close()
 
     def get_most_available_still(self):
         ###
