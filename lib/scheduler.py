@@ -283,16 +283,16 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             # Launch actions that can be scheduled
             for tm in self.launched_actions:
                 if self.check_taskmanager(tm) is False:  # Check if the TaskManager is still available, if not it will pop it out
-                    break
+                    continue
 
                 while len(self.get_launched_actions(tm, tx=False)) < self.actions_per_still:
                     action_from_queue = self.pop_action_queue(tm, tx=False)
                     if action_from_queue is not False:
                         if self.launch_action(action_from_queue) != "OK":  # If we had a connection error stop trying until TM checks back in
-                            break
+                            continue
                     else:
                         logger.info("No actions available for still : %s" % tm)
-                        break  # move on to next still
+                        continue
 
             self.clean_completed_actions(self.dbi)
 
