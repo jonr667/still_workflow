@@ -151,6 +151,11 @@ class MonitorHandler(BaseHTTPRequestHandler):
                 data_on_tasks = self.get_from_server(still, "INFO_TASKS")
                 for line in data_on_tasks.split('\n'):   # Process each line from the taskmanager relating to its current procs
                     obs_info_dict.update({line.split(':', 1)[0]: str(line)})
+                # FIXME!!!!
+                # I am working off of the schedulers list of processes when I should just be getting that completely
+                # from the task manager.  OR loading the tasks returned from the TM on recovery
+                # Some tasks won't show up after recovery
+                #
 
                 for myaction in self.server.launched_actions[still]:
                     try:
