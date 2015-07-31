@@ -2,8 +2,14 @@
 
 obs=$1
 pwd=$(pwd)
+hostname=$(hostname -s)
 
-production_dir="/nfs/eor-11/r1/EoRuvfits/batch"
+production_dir="/$hostname/r1/EoRuvfits/batch"
+
+if [ ! -d $production_dir ]; then
+   echo "Creating directory : $production_dir"
+   mkdir -p $production_dir
+fi
 
 if [ ! $1 ]; then
    echo "No observation ID given."
