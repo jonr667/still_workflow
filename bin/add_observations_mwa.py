@@ -1,7 +1,18 @@
 import psycopg2
 import psycopg2.extras
 import numpy as np
+import os
+import sys
+import argparse
 
+from still import get_dbi_from_config
+from still import SpawnerClass
+from still import WorkFlow
+from still import process_client_config_file
+
+basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
+sys.path.append(basedir + 'lib')
+import dbi
 
 def ingest_addtional_opsids(sg):
     # will maybe change this over to SQL alchemy later
@@ -60,3 +71,36 @@ def get_all_nags_files_for_obsid(sg, obsid):
         #            sg.db.add_file(obsid, file_info['host_id'][:-5], path)
 
     return 0
+
+
+def main():
+
+    parser = argparse.ArgumentParser(description='MWA - Add observations to Workflow Manager')
+
+    parser.add_argument('--config_file', dest='config_file', required=False,
+                        help="Specify the complete path to the config file, by default we'll use etc/still.cfg")
+    parser.add_argument('-o', dest='obsnums', required=True, nargs='+',
+                        help="List of obervations seperated by spaces")
+
+    parser.set_defaults(config_file="%setc/still.cfg" % basedir)
+
+    args, unknown = parser.parse_known_args()
+
+    sg = SpawnerClass()
+    wf = WorkFlow()
+
+    sg.config_file = args.config_file
+    process_client_config_file(sg, wf)
+    dbi = get_dbi_from_config(args.config_file)
+    dbi.test_db()  # Testing the database to make sure we made a connection, its fun..
+
+    # obsnum = self.add_observation(obs['obsnum'], obs['date'], obs['date_type'], obs['pol'],
+    #                                      obs['filename'], obs['host'], outputhost=obs['outputhost'],
+    #                                      length=obs['length'], status=obs['status'])
+
+    # dbi.add_observation(obsinfo, "NEW")
+    for obsid in args.obsnums:
+        print("Obsid: %s") % obsid
+        dbi.add_observation(obsid, obsid, "GPS", '', '', '', outputhost='', length='', status='NEW')
+if __name__ == "__main__":
+    main()

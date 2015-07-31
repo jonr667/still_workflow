@@ -312,6 +312,7 @@ def main():
 
     args, unknown = parser.parse_known_args()
     sg.config_file = args.config_file
+
     process_client_config_file(sg, workflow_objects)
 
     # Create database interface with SQL Alchemy

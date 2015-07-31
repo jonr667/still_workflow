@@ -316,8 +316,7 @@ class DataBaseInterface(object):
         s.commit()
         obsnum = OBS.obsnum
         s.close()
-        self.add_file(obsnum, host, filename)  # todo test.
-        sys.stdout.flush()
+        self.add_file(obsnum, host, filename)
         return obsnum
 
     def add_file(self, obsnum, host, filename):
