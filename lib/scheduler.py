@@ -294,10 +294,10 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                     action_from_queue = self.pop_action_queue(tm, tx=False)
                     if action_from_queue is not False:
                         if self.launch_action(action_from_queue) != "OK":  # If we had a connection error stop trying until TM checks back in
-                            continue
+                            break
                     else:
                         logger.info("No actions available for still : %s" % tm)
-                        continue
+                        break
 
             self.clean_completed_actions(self.dbi)
 
