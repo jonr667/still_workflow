@@ -279,7 +279,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             if (time.time() - last_checked_for_stills) > TIME_INT_FOR_NEW_TM_CHECK:
                 self.find_all_taskmanagers()
                 last_checked_for_stills = time.time()
-                logger.debug("Number of stills : %s" % len(self.task_clients))
+                logger.debug("Number of TaskManagers : %s" % len(self.task_clients))
 
             self.ext_command_hook()
             self.get_new_active_obs()
@@ -290,13 +290,13 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                 if self.check_taskmanager(tm) is False:  # Check if the TaskManager is still available, if not it will pop it out
                     continue
 
-                while len(self.get_launched_actions(tm, tx=False)) < self.actions_per_still:
+                while len(self.get_launched_actions(tm, tx=False)) < self.actions_per_still:  # Fix ME! should be reading from the db per still
                     action_from_queue = self.pop_action_queue(tm, tx=False)
                     if action_from_queue is not False:
                         if self.launch_action(action_from_queue) != "OK":  # If we had a connection error stop trying until TM checks back in
                             break
                     else:
-                        logger.info("No actions available for still : %s" % tm)
+                        logger.info("No actions available for TaskManager : %s" % tm)
                         break
 
             self.clean_completed_actions(self.dbi)

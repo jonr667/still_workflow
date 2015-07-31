@@ -15,6 +15,7 @@ sys.path.append(basedir + 'lib')
 
 
 def ingest_addtional_opsids(sg):
+    # REQUIRES PG9.4 to work
     # will maybe change this over to SQL alchemy later
     # Throwing it in now as straight SQL to get things working
     # so I can move onto other parts for the moment
@@ -47,6 +48,7 @@ def ingest_addtional_opsids(sg):
 
 
 def get_all_nags_files_for_obsid(sg, obsid):
+        # REQUIRES PG9.4 to work
         # Get all the files associated with each unique obsid, there is some redundency here but went for readability of logic over
         # most effecient
     myfiles = []
@@ -101,6 +103,6 @@ def main():
     # dbi.add_observation(obsinfo, "NEW")
     for obsid in args.obsnums:
         print("Obsid: %s") % obsid
-        dbi.add_observation(obsid, obsid, "GPS", '', '', '', outputhost='', length='', status='NEW')
+        dbi.add_observation(obsid, obsid, "GPS", None, None, None, outputhost=None, length=None, status='NEW')
 if __name__ == "__main__":
     main()
