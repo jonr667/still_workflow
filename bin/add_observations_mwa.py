@@ -12,7 +12,7 @@ from still import process_client_config_file
 
 basedir = os.path.dirname(os.path.realpath(__file__))[:-3]
 sys.path.append(basedir + 'lib')
-import dbi
+
 
 def ingest_addtional_opsids(sg):
     # will maybe change this over to SQL alchemy later
