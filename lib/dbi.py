@@ -494,6 +494,9 @@ class DataBaseInterface(object):
 
         todo:test
         """
+        mypath = ""
+        myhost = ""
+        myfile = ""
         s = self.Session()
         OBS = s.query(Observation).filter(Observation.obsnum == obsnum).one()
         # Jon: Maybe make the like statement a variable in the config file? for now I will cheat for a bit
@@ -507,12 +510,15 @@ class DataBaseInterface(object):
             logger.exception("Could not get input file for OBS: %s " % obsnum)
 
         # Jon : FIX ME!!!!!
-        POTFILE = s.query(File).filter(File.observation == OBS).first()
-        host = POTFILE.host
-        path = os.path.dirname(POTFILE.filename)
-        file = os.path.basename(POTFILE.filename)
+        try:
+            POTFILE = s.query(File).filter(File.observation == OBS).first()
+            myhost = POTFILE.host
+            mypath = os.path.dirname(POTFILE.filename)
+            myfile = os.path.basename(POTFILE.filename)
+        except:
+            pass
         s.close()
-        return host, path, file
+        return myhost, mypath, myfile
 
     def get_output_location(self, obsnum):
         """
