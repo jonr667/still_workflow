@@ -500,14 +500,14 @@ class DataBaseInterface(object):
         s = self.Session()
         OBS = s.query(Observation).filter(Observation.obsnum == obsnum).one()
         # Jon: Maybe make the like statement a variable in the config file? for now I will cheat for a bit
-        try:
-            POTFILE = s.query(File).filter(
-                File.observation == OBS,
-                # File.host.like('%pot%'), # XXX temporarily commenting this out.
-                # need a better solution for finding original file
-                File.filename.like('%uv')).one()
-        except:
-            logger.exception("Could not get input file for OBS: %s " % obsnum)
+        # try:
+        #    POTFILE = s.query(File).filter(
+        #        File.observation == OBS,
+        #        # File.host.like('%pot%'), # XXX temporarily commenting this out.
+        #        # need a better solution for finding original file
+        #        File.filename.like('%uv')).one()
+        # except:
+        #    logger.exception("Could not get input file for OBS: %s " % obsnum)
 
         # Jon : FIX ME!!!!!
         try:
