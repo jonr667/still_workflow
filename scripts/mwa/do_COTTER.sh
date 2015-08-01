@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cotter_args="-timeres 2 -freqres 80 -usepcentre -initflag 2 -noflagautos -absmem 40 -j 5"
+cotter_args="-timeres 2 -freqres 80 -usepcentre -initflag 2 -noflagautos -absmem 40 -j 5 -o $obs.uvfits -saveqs $obs.qs"
 
 obs=$1
 
@@ -20,6 +20,7 @@ gpu_files=$(ls *gpu*.fits | tr "\n" " ")
 if [ -f NO_FLAG_FILES ]; then
    echo "running cotter in flaggin mode"
    echo "cotter -m $obs.metafits $cotter_args $gpu_files"
+   cotter -m $obs.metafits $cotter_args $gpu_files
    return_code=$?
 else
    echo "running cotter using Randall flags"
