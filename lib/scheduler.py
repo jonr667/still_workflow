@@ -464,7 +464,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             else:
                 print("Rejected")
                 return None
-        if self.wf.neighbors == 1: # FIX ME, I don't want to call the same thing twice.. its ugly
+        if self.wf.neighbors == 1:  # FIX ME, I don't want to call the same thing twice.. its ugly
             neighbors = self.dbi.get_neighbors(obsnum)
 
             if None in neighbors:
@@ -488,7 +488,8 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                 still = self.tm_cycle.next().hostname  # Balance out all the nodes on startup
             else:
                 still = self.obs_to_still(obsnum)  # Get a still for a new obsid if one doesn't already exist.
-            if self.lock_all_neighbors_to_same_still == 1:
+                self.dbi.set_obs_still_host(obsnum, still)
+            if self.lock_all_neighbors_to_same_still == 1 and self.wf.neighbors == 1:
                 for neighbor in self.get_all_neighbors(obsnum):
                     self.dbi.set_obs_still_host(neighbor, still)
 
