@@ -501,6 +501,8 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             if self.wf.neighbors == 1:
                 if a.has_prerequisites() is True:
                     return a
+            else:
+                return a
         # logging.debug('scheduler.get_action: (%s,%s) does not have prereqs' % (a.task, a.obs))
         return None
 
