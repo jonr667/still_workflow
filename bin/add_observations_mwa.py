@@ -29,25 +29,25 @@ def ingest_addtional_opsids(sg):
     cur = pgconn.cursor()  # Normal cursor, non-dict
     # Get all the new OBS id's avaiable from the NGAS postgresql database and check against files that are currently in the still
     # as well as files that are in the mwa_qc db and have thus already been processed
-    cur.execute("""SELECT cast(substring(foreign_ngas_files.file_id, 1,10) AS bigint)
+    cur.execute("""SELECT cast(substring(foreign_ngas_files.file_id, 1,10) AS varchar(10))
                    FROM
                       foreign_ngas_files
                    WHERE
                       cast(substring(foreign_ngas_files.file_id, 1,10) AS varchar(10)) NOT IN (SELECT cast(obsid AS varchar(10)) FROM foreign_mwa_qc WHERE obsid IS NOT NULL)
                       AND cast(substring(foreign_ngas_files.file_id, 1,10) AS varchar(10)) NOT IN (SELECT cast(obsnum AS varchar(10)) FROM observation WHERE obsnum IS NOT NULL)
-                   LIMIT 50""")
+                   LIMIT 100000""")
 
     rows = cur.fetchall()
     unique_obsids = np.unique(rows)  # Lets just make sure we trim out all the extra obs id's we get from each having multiple files associated with it
 
     for obsid in unique_obsids:  # We now need to add all the files that are associated with each obs id to the db as well as the primary entry
         print("Adding obsid: %s") % obsid
-        sg.db.add_observation(obsnum=obsid, date=obsid, date_type='GPS', pol=0, filename='none', host='none', length=0, status='NEW')  # Add primary entry for obsnum
-        sg.db.add_file(obsid, "na", "na")
+#        sg.db.add_observation(obsnum=obsid, date=obsid, date_type='GPS', pol=0, filename='none', host='none', length=0, status='NEW')  # Add primary entry for obsnum
+#        sg.db.add_file(obsid, "na", "na")
     return 0
 
 
-def get_all_nags_files_for_obsid(sg, obsid):
+def get_all_ngas_files_for_obsid(sg, obsid):
         # REQUIRES PG9.4 to work
         # Get all the files associated with each unique obsid, there is some redundency here but went for readability of logic over
         # most effecient
@@ -81,7 +81,7 @@ def main():
 
     parser.add_argument('--config_file', dest='config_file', required=False,
                         help="Specify the complete path to the config file, by default we'll use etc/still.cfg")
-    parser.add_argument('-o', dest='obsnums', required=True, nargs='+',
+    parser.add_argument('-o', dest='obsnums', required=False, nargs='+',
                         help="List of obervations seperated by spaces")
 
     parser.set_defaults(config_file="%setc/still.cfg" % basedir)
@@ -96,13 +96,11 @@ def main():
     dbi = get_dbi_from_config(args.config_file)
     dbi.test_db()  # Testing the database to make sure we made a connection, its fun..
 
-    # obsnum = self.add_observation(obs['obsnum'], obs['date'], obs['date_type'], obs['pol'],
-    #                                      obs['filename'], obs['host'], outputhost=obs['outputhost'],
-    #                                      length=obs['length'], status=obs['status'])
+    ingest_addtional_opsids(sg)
+    #for obsid in args.obsnums:
+    #    print("Obsid: %s") % obsid
+    #    dbi.add_observation(obsid, obsid, "GPS", None, None, None, outputhost=None, length=None, status='NEW')
 
-    # dbi.add_observation(obsinfo, "NEW")
-    for obsid in args.obsnums:
-        print("Obsid: %s") % obsid
-        dbi.add_observation(obsid, obsid, "GPS", None, None, None, outputhost=None, length=None, status='NEW')
+
 if __name__ == "__main__":
     main()

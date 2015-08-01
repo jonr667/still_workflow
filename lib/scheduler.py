@@ -464,18 +464,19 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             else:
                 print("Rejected")
                 return None
+        if self.wf.neighbors == 1:
+            neighbors = self.dbi.get_neighbors(obsnum)
 
-        neighbors = self.dbi.get_neighbors(obsnum)
+            if None in neighbors:
+                cur_step_index = self.wf.workflow_actions_endfile.index(status)
+                next_step = self.wf.workflow_actions_endfile[cur_step_index + 1]
 
-        if None in neighbors:
-            cur_step_index = self.wf.workflow_actions_endfile.index(status)
-            next_step = self.wf.workflow_actions_endfile[cur_step_index + 1]
+            else:  # this is a normal file
+                cur_step_index = self.wf.workflow_actions.index(status)
+                next_step = self.wf.workflow_actions[cur_step_index + 1]
 
-        else:  # this is a normal file
-            cur_step_index = self.wf.workflow_actions.index(status)
-            next_step = self.wf.workflow_actions[cur_step_index + 1]
+            neighbor_status = [self.dbi.get_obs_status(n) for n in neighbors if n is not None]
 
-        neighbor_status = [self.dbi.get_obs_status(n) for n in neighbors if n is not None]
         still = self.dbi.get_obs_still_host(obsnum)
 
         if not still:
