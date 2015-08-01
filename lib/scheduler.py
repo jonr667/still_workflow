@@ -479,6 +479,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         else:
             cur_step_index = self.wf.workflow_actions.index(status)
             next_step = self.wf.workflow_actions[cur_step_index + 1]
+            neighbor_status = 0
 
         still = self.dbi.get_obs_still_host(obsnum)
 
