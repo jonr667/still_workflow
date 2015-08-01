@@ -464,7 +464,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             else:
                 print("Rejected")
                 return None
-        if self.wf.neighbors == 1:
+        if self.wf.neighbors == 1: # FIX ME, I don't want to call the same thing twice.. its ugly
             neighbors = self.dbi.get_neighbors(obsnum)
 
             if None in neighbors:
@@ -476,6 +476,9 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                 next_step = self.wf.workflow_actions[cur_step_index + 1]
 
             neighbor_status = [self.dbi.get_obs_status(n) for n in neighbors if n is not None]
+        else:
+            cur_step_index = self.wf.workflow_actions.index(status)
+            next_step = self.wf.workflow_actions[cur_step_index + 1]
 
         still = self.dbi.get_obs_still_host(obsnum)
 
