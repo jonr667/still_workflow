@@ -15,15 +15,15 @@ if [ ! -d $obs ]; then
 fi
 cd $obs
 
-gpu_files=$(cat gpu_file_locations_list_$obs.txt | tr -d "\n")
+gpu_files=$(ls *gpu*.fits | tr "\n" " ")
 
 if [ -f NO_FLAG_FILES ]; then
-   echo "running cotter in flaggin mode" >>$obslog
-   cotter -m $obs.metafits $cotter_args $gpu_files
+   echo "running cotter in flaggin mode"
+   echo "cotter -m $obs.metafits $cotter_args $gpu_files"
    return_code=$?
 else
-   echo "running cotter using Randall flags" >>$obslog
-   cotter -m $obs.metafits $cotter_args -flagfiles $obs_%%.mwaf $gpu_files
+   echo "running cotter using Randall flags"
+   echo "cotter -m $obs.metafits $cotter_args -flagfiles $obs_%%.mwaf $gpu_files"
    return_code=$?
 fi
 

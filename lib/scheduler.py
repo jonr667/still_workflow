@@ -284,9 +284,9 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             self.ext_command_hook()
             self.get_new_active_obs()
             self.update_action_queue(ActionClass, action_args)
-
+            launched_actions_copy = self.launched_actions
             # Launch actions that can be scheduled
-            for tm in self.launched_actions:
+            for tm in launched_actions_copy:
                 if self.check_taskmanager(tm) is False:  # Check if the TaskManager is still available, if not it will pop it out
                     continue
 
