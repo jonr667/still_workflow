@@ -288,10 +288,11 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             launched_actions_copy = copy.copy(self.launched_actions)
             # Launch actions that can be scheduled
             for tm in launched_actions_copy:
+                tm_info = self.dbi.get_still_info(tm)
                 if self.check_taskmanager(tm) is False:  # Check if the TaskManager is still available, if not it will pop it out
                     continue
 
-                while len(self.get_launched_actions(tm, tx=False)) < self.actions_per_still:  # Fix ME! should be reading from the db per still
+                while len(self.get_launched_actions(tm, tx=False)) < tm_info.max_num_of_tasks:  # I think this will work
                     action_from_queue = self.pop_action_queue(tm, tx=False)
                     if action_from_queue is not False:
                         if self.launch_action(action_from_queue) != "OK":  # If we had a connection error stop trying until TM checks back in
@@ -312,6 +313,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
 
     def shutdown(self):
         logger.info("Shutting down...")
+        self.keep_running = False
         HTTPServer.shutdown(self)
         sys.exit(0)
 

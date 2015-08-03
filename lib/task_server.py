@@ -146,6 +146,11 @@ class TaskClient:
         logger = sg.logger
 
     def transmit(self, task, obs, action_type):
+        ###
+        #
+        # This function along with the recieve should both to redone to pass the data via XML
+        ###
+
         conn_headers = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain"}
         status = ''
         response_status = -1

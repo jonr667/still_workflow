@@ -63,6 +63,7 @@ class SpawnerClass:
         self.path_to_do_scripts = ''
         self.logger = ''
         self.env_vars = ''
+        self.ip_addr = ''
 
     def preflight_check_scheduler(self):
         # Nothing to do here at the moment, just a place holder
@@ -186,7 +187,8 @@ def process_client_config_file(sg, wf):
 
         # Read in all the STILL information
         sg.hosts = get_config_entry(config, 'Still', 'hosts', reqd=True, remove_spaces=True).split(",")
-        sg.port = int(get_config_entry(config, 'Still', 'port', reqd=True, remove_spaces=True))
+        sg.port = int(get_config_entry(config, 'Still', 'port', reqd=False, remove_spaces=True))
+        sg.ip_addr = get_config_entry(config, 'Still', 'ip_addr', reqd=False, remove_spaces=True)
         sg.data_dir = get_config_entry(config, 'Still', 'data_dir', reqd=False, remove_spaces=False)
         sg.path_to_do_scripts = get_config_entry(config, 'Still', 'path_to_do_scripts', reqd=False, remove_spaces=False, default_val=basedir + 'scripts/')
         sg.timeout = int(get_config_entry(config, 'Still', 'timeout', reqd=False, remove_spaces=True))
@@ -303,7 +305,7 @@ def main():
                         help='Start a Still Task Client')
     parser.add_argument('--config_file', dest='config_file', required=False,
                         help="Specify the complete path to the config file, by default we'll use etc/still.cfg")
-    parser.add_argument('--data_dir', dest='data_dir', required=False,
+    parser.add_argument('-d', dest='data_dir', required=False,
                         help="For use with --server only, specifies a data_dir for still server, *overrides value in config file*")
     parser.add_argument('-p', dest='port', required=False,
                         help="For use with --server only, specifies a port for still server, *overrides value in config file*")
@@ -315,8 +317,11 @@ def main():
 
     process_client_config_file(sg, workflow_objects)
 
-    # Create database interface with SQL Alchemy
+    # Assign command line arquments over conf file arguments here
+    sg.data_dir = args.data_dir
+    sg.port = args.port
 
+    # Create database interface with SQL Alchemy
     get_dbi_from_config(sg.config_file, Spawner=sg, still_startup=1)
 
     if args.client is True:
