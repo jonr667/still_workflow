@@ -68,7 +68,7 @@ class Task:
             if FAIL_ON_ERROR == 1:
                 self.ts.shutdown()
         try:
-            process.nice(2)  # Jon : I want to set all the processes evenly so they don't compete against core OS functionality slowing things down.
+            process.nice(2)  # Jon : I want to set all the processes evenly so they don't compete against core OS functionality (ssh, cron etc..) slowing things down.
             if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
                 process.cpu_affinity(range(psutil.cpu_count()))
         except:
@@ -281,7 +281,7 @@ class TaskHandler(BaseHTTPRequestHandler):
             obsnum = str(form.getfirst("obsnum", ""))
             still = form.getfirst("still", "")
             args = form.getfirst("args", "").split(' ')
-            env_vars = form.getfirst("env_vars", "")
+            env_vars = form.getfirst("env_vars", "")  # should be coming in as string : "var1::value var2::value2 var3::value3"
             logger.info('TaskHandler.handle: received (%s,%s) with args=%s' % (task, obsnum, ' '.join(args)))  # , ' '.join(env_vars)))
 
         if task == 'COMPLETE':
