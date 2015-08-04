@@ -24,7 +24,8 @@ if [ -f NO_FLAG_FILES ]; then
    return_code=$?
 else
    echo "running cotter using Randall flags"
-   echo "cotter -m $obs.metafits $cotter_args -flagfiles $obs_%%.mwaf $gpu_files"
+   echo "cotter -m $obs.metafits $cotter_args -flagfiles ${obs}_%%.mwaf $gpu_files"
+   cotter -m $obs.metafits $cotter_args -flagfiles ${obs}_%%.mwaf $gpu_files
    return_code=$?
 fi
 
