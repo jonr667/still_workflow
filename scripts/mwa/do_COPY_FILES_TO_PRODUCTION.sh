@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 obs=$1
@@ -7,14 +6,14 @@ hostname=$(hostname -s)
 
 production_dir=$(echo $production_dir | sed s/{hostname}/$hostname/)
 
-if [ ! $1 ]; then
-   echo "No observation ID given."
-   exit 1
-fi
-
 if [ ! -d $production_dir ]; then
    echo "Creating directory : $production_dir"
    mkdir -p $production_dir
+fi
+
+if [ ! $1 ]; then
+   echo "No observation ID given."
+   exit 1
 fi
 
 if [ ! -d $obs ]; then
@@ -26,9 +25,9 @@ cd $obs
 LIST_OF_FILES="uvfits metafits qs"
 
 for file_type in $LIST_OF_FILES; do
-   if [ -f $obs.$file_type ]; then
-      cp $obs.$file_type $production_dir/
-      if [ ! -f $production_dir/$obs.$file_type ]; then
+   if [ -e $obs.$file_type ]; then
+      cp -r $obs.$file_type $production_dir/
+      if [ ! -e $production_dir/$obs.$file_type ]; then
          echo "File $obs.$file_type could not be copied to $production_dir"
          exit 1
       fi 
