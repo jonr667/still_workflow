@@ -83,6 +83,8 @@ def main():
                         help="Specify the complete path to the config file, by default we'll use etc/still.cfg")
     parser.add_argument('-o', dest='obsnums', required=False, nargs='+',
                         help="List of obervations seperated by spaces")
+    parser.add_argument('--generate', dest='generate', required=False,
+                        help="Generates a list of unprocessed obsnums, note that projID and filecount have not been checked")
 
     parser.set_defaults(config_file="%setc/still.cfg" % basedir)
 
@@ -95,11 +97,12 @@ def main():
     process_client_config_file(sg, wf)
     dbi = get_dbi_from_config(args.config_file)
     dbi.test_db()  # Testing the database to make sure we made a connection, its fun..
-
-    ingest_addtional_opsids(sg)
-    #for obsid in args.obsnums:
-    #    print("Obsid: %s") % obsid
-    #    dbi.add_observation(obsid, obsid, "GPS", None, None, None, outputhost=None, length=None, status='NEW')
+    if args.generate:
+        ingest_addtional_opsids(sg)
+    else:
+        for obsid in args.obsnums:
+            print("Obsid: %s") % obsid
+            dbi.add_observation(obsid, obsid, "GPS", None, None, None, outputhost=None, length=None, status='NEW')
 
 
 if __name__ == "__main__":
