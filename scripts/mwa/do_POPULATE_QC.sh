@@ -1,8 +1,5 @@
 #!/bin/bash
 
-version=4
-subversion=1
-production_dir="/nfs/eor-11/r1/EoRuvfits/batch"
 
 obs=$1
 

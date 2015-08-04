@@ -197,10 +197,8 @@ def process_client_config_file(sg, wf):
         sg.sleep_time = int(get_config_entry(config, 'Still', 'sleep_time', reqd=False, remove_spaces=True))
         sg.log_path = get_config_entry(config, 'Still', 'log_path', reqd=False, remove_spaces=False, default_val=basedir + 'log/')
 
-        if "EnvironmentVars" in config_sections:  # There is probably a better way to do this but it works I suppose.
-            for env_var in config.items("EnvironmentVars"):
-                sg.env_vars += ' ' + str('::'.join(list(env_var)))  # Creates a string of "var1::value var2::value2 var3::value3"
-            sg.env_vars = sg.env_vars[1:]
+        if "ScriptEnvironmentVars" in config_sections:  # Read in allow the env vars for the do_ scripts
+            sg.env_vars = dict(config.items('ScriptEnvironmentVars'))  # Put the vars into a dict that we will later pickle
 
         # Read in all the workflow information
         wf.workflow_actions = tuple(get_config_entry(config, 'WorkFlow', 'actions', reqd=True, remove_spaces=True).split(","))
@@ -318,8 +316,10 @@ def main():
     process_client_config_file(sg, workflow_objects)
 
     # Assign command line arquments over conf file arguments here
-    sg.data_dir = args.data_dir
-    sg.port = args.port
+    if args.data_dir:
+        sg.data_dir = args.data_dir
+    if args.port:
+        sg.port = args.port
 
     # Create database interface with SQL Alchemy
     get_dbi_from_config(sg.config_file, Spawner=sg, still_startup=1)

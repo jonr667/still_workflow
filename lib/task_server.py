@@ -10,6 +10,7 @@ import httplib
 import urllib
 import sys
 import psutil
+import pickle
 
 from string import upper
 
@@ -26,11 +27,13 @@ FAIL_ON_ERROR = 1
 
 
 class Task:
-    def __init__(self, task, obs, still, args, dbi, TaskServer, cwd='.', path_to_do_scripts="."):
+    def __init__(self, task, obs, still, args, dbi, TaskServer, cwd='.', path_to_do_scripts=".", custom_env_vars={}):
         self.task = task
         self.obs = obs
         self.still = still
         self.args = args
+        self.custom_env_vars = custom_env_vars
+        self.full_env = {}
         self.dbi = dbi
         self.cwd = cwd
         self.process = None
@@ -58,10 +61,14 @@ class Task:
         self.OUTFILE = tempfile.TemporaryFile()
         self.outfile_counter = 0
 
-        current_env = os.environ
-        full_env = current_env  # Add obsnum and task to all
+        current_env = os.environ            # Combine the current environment that the TaskManager is running in with any additional ones for the do_ script specified in conf file
+        global_env_vars = {'obsnum': self.obs, 'task': self.task}
+        self.full_env = current_env.copy()
+        self.full_env.update(self.custom_env_vars)
+        self.full_env.update(global_env_vars)
+
         try:
-            process = psutil.Popen(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args, cwd=self.cwd, env=full_env, stderr=self.OUTFILE, stdout=self.OUTFILE)
+            process = psutil.Popen(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args, cwd=self.cwd, env=self.full_env, stderr=self.OUTFILE, stdout=self.OUTFILE)
         except Exception:
             logger.exception('Task._run: (%s,%s) error="%s"' % (self.task, self.obs, ' '.join(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args)))
             self.record_failure()
@@ -162,7 +169,8 @@ class TaskClient:
             conn_path = "/NEW_TASK"
             args = self.gen_args(task, obs)
             args_string = ' '.join(args)
-            conn_params = urllib.urlencode({'obsnum': obs, 'task': task, 'args': args_string, 'env_vars': self.sg.env_vars})
+            pickled_env_vars = pickle.dumps(self.sg.env_vars)
+            conn_params = urllib.urlencode({'obsnum': obs, 'task': task, 'args': args_string, 'env_vars': pickled_env_vars})
             logger.debug('TaskClient.transmit: sending (%s,%s) with args=%s' % (task, obs, args_string))
 
         elif action_type == "KILL_TASK":
@@ -268,6 +276,7 @@ class TaskHandler(BaseHTTPRequestHandler):
 
         return
 
+
     def do_POST(self):
         task_already_exists = False
 
@@ -281,7 +290,9 @@ class TaskHandler(BaseHTTPRequestHandler):
             obsnum = str(form.getfirst("obsnum", ""))
             still = form.getfirst("still", "")
             args = form.getfirst("args", "").split(' ')
-            env_vars = form.getfirst("env_vars", "")  # should be coming in as string : "var1::value var2::value2 var3::value3"
+            pickled_env_vars = form.getfirst("env_vars", "")  # Will be coming in pickled, might want to do the same for args
+            env_vars = pickle.loads(pickled_env_vars)  # depickled env_vars, should now be a dict
+
             logger.info('TaskHandler.handle: received (%s,%s) with args=%s' % (task, obsnum, ' '.join(args)))  # , ' '.join(env_vars)))
 
         if task == 'COMPLETE':
@@ -295,7 +306,7 @@ class TaskHandler(BaseHTTPRequestHandler):
                     break
 
             if task_already_exists is False:
-                t = Task(task, obsnum, still, args, self.server.dbi, self.server, self.server.data_dir, self.server.path_to_do_scripts)
+                t = Task(task, obsnum, still, args, self.server.dbi, self.server, self.server.data_dir, self.server.path_to_do_scripts, custom_env_vars=env_vars)
                 self.server.append_task(t)
                 t.run()
         return

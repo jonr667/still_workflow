@@ -1,8 +1,10 @@
 #!/bin/bash
 
-version=4
-subversion=1
-production_dir="/nfs/eor-11/r1/EoRuvfits/batch"
+#version=4
+#subversion=1
+hostname=$(hostname -s)
+
+production_dir=$(echo $production_dir | sed s/{hostname}/$hostname/)
 
 obs=$1
 
@@ -17,14 +19,14 @@ if [ ! -d $obs ]; then
 fi
 cd $obs
 
-write_uvfits_loc.py -o $obs -v $version -s $subversion -f $production_dir/$obs.uvfits
+write_uvfits_loc.py -o $obs -v $wf_version -s $wf_subversion -f $production_dir/$obs.uvfits
 return_code=$?
 
 if [ $return_code -eq 0 ]; then
    echo "Successuflly wrote uvfits file location to db"
    exit 0
 else
-   echo "write_uvfits_loc.py -o $obs -v $version -s $subversion -f $production_dir/$obs.uvfits : returned with error code : $return_code"
+   echo "write_uvfits_loc.py -o $obs -v $wf_version -s $wf_subversion -f $production_dir/$obs.uvfits : returned with error code : $return_code"
    exit 1
 fi
 
