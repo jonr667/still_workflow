@@ -5,10 +5,10 @@ pwd=$(pwd)
 hostname=$(hostname -s)
 
 production_dir=$(echo $production_dir | sed s/{hostname}/$hostname/)
-
-if [ ! -d $production_dir ]; then
-   echo "Creating directory : $production_dir"
-   mkdir -p $production_dir
+real_prod_dir=$(echo $production_dir | cut -f 2 -d '/' --complement)
+if [ ! -d $real_prod_dir ]; then
+   echo "Creating directory : $real_prod_dir"
+   mkdir -p $real_prod_dir
 fi
 
 if [ ! $1 ]; then
@@ -26,9 +26,9 @@ LIST_OF_FILES="uvfits metafits qs"
 
 for file_type in $LIST_OF_FILES; do
    if [ -e $obs.$file_type ]; then
-      cp -r $obs.$file_type $production_dir/
-      if [ ! -e $production_dir/$obs.$file_type ]; then
-         echo "File $obs.$file_type could not be copied to $production_dir"
+      cp -r $obs.$file_type $real_prod_dir/
+      if [ ! -e $real_prod_dir/$obs.$file_type ]; then
+         echo "File $obs.$file_type could not be copied to $real_prod_dir"
          exit 1
       fi 
    else
