@@ -2,8 +2,10 @@
 
 #version=4
 #subversion=1
-hostname=$(hostname -s)
 
+# Only commenting this out and hardcoding a host because eor-14 is out of space on /r1
+#hostname=$(hostname -s)
+hostname='eor-13'
 production_dir=$(echo $production_dir | sed s/{hostname}/$hostname/)
 
 obs=$1
