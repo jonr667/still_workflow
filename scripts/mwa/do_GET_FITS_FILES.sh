@@ -18,7 +18,7 @@ for gpufile in $( cat gpu_file_locations_list_$obs.txt ); do
    file_host=$( echo $gpufile | awk -F'/' '{print $2}' )
    #if [ -f $gpufile ]; then
    #   cp $gpufile ./
-   scp $file_host:$gpufile ./
+   scp -c arcfour128 $file_host:$gpufile ./
    return_code=$?
       
    if [ $return_code -ne 0 ]; then
