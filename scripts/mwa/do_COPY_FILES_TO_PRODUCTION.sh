@@ -12,10 +12,11 @@ production_dir=$(echo $production_dir | sed s/{hostname}/$hostname/)
 
 real_prod_dir=$(echo $production_dir | cut -f 2 -d '/' --complement)
 
-if [ ! -d $real_prod_dir ]; then
-   echo "Creating directory : $real_prod_dir"
-   mkdir -p $real_prod_dir
-fi
+# Only commenting this out and hardcoding a host because eor-14 is out of space on /r1
+#if [ ! -d $real_prod_dir ]; then
+#   echo "Creating directory : $real_prod_dir"
+#   mkdir -p $real_prod_dir
+#fi
 
 if [ ! $1 ]; then
    echo "No observation ID given."
