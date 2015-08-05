@@ -40,10 +40,11 @@ for file_type in $LIST_OF_FILES; do
        # Commneted out the cp because no space on eor-14
        #cp -r $obs.$file_type $real_prod_dir/
        scp -r $obs.$file_type $hostname:$real_prod_dir/
-      if [ ! -e $real_prod_dir/$obs.$file_type ]; then
-         echo "File $obs.$file_type could not be copied to $real_prod_dir"
-         exit 1
-      fi 
+       # Only commenting this out and hardcoding a host because eor-14 is out of space on /r1
+       # if [ ! -e $real_prod_dir/$obs.$file_type ]; then
+       #    echo "File $obs.$file_type could not be copied to $real_prod_dir"
+       #    exit 1
+       # fi 
    else
       echo "Could not find file $obs.$file_type"
       exit 1
