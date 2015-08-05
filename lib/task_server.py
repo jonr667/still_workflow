@@ -262,7 +262,7 @@ class TaskHandler(BaseHTTPRequestHandler):
                 self.end_headers()
         elif upper(parsed_path.path) == "/INFO_TASKS":
             message = ""
-            for mytask in self.server.active_tasks:
+            for mytask in self.server.active_tasks:  # Jon : !!CHANGE THIS TO USE A PICKLED DICT!!
                 try:
                     child_proc = mytask.process.children()[0]
                     if psutil.pid_exists(child_proc.pid):

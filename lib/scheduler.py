@@ -162,7 +162,7 @@ class MonitorHandler(BaseHTTPRequestHandler):
                     try:
                         message += "   Observation # : " + myaction.obs + " - Current Task : " + myaction.task + \
                                    " - CPU Usage : " + obs_info_dict[myaction.obs].split(':')[3] + \
-                                   "% - Mem Usage : " + str(int(obs_info_dict[myaction.obs].split(':')[4]) / 1024) + "k" + \
+                                   " - Mem Usage : " + str(int(obs_info_dict[myaction.obs].split(':')[4]) / 1024 / 1024) + "MB" + \
                                    " - Time : " + obs_info_dict[myaction.obs].split(':')[5] + 's' + "\n"
                     except:
                         pass
