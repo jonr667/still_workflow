@@ -50,8 +50,11 @@ def jdpol2obsnum(jd, pol, djd):
     """
     import aipy as a
     dublinjd = jd - 2415020  # use Dublin Julian Date
-    obsint = int(dublinjd / djd)  # divide up by length of obs
+    # print("JD: %s  dublinjd : %s") % (jd, dublinjd)
+    # obsint = int(dublinjd / djd)  # divide up by length of obs
+    obsint = int(round(dublinjd / djd))  # divide up by length of obs
     polnum = a.miriad.str2pol[pol] + 10
+    # print("JD: %s  dublinjd : %s  polnum : %s") % (jd, dublinjd, polnum)
     assert(obsint < 2 ** 31)
     return int(obsint + polnum * (2 ** 32))
 
