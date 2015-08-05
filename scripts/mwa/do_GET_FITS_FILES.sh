@@ -15,12 +15,20 @@ fi
 cd $obs
 
 for gpufile in $( cat gpu_file_locations_list_$obs.txt ); do
-   if [ -f $gpufile ]; then
-      cp $gpufile ./
+   file_host=$( echo $gpufile | awk -F'/' '{print $2}' )
+   #if [ -f $gpufile ]; then
+   #   cp $gpufile ./
+   scp $file_host:$gpufile ./
+   return_code=$?
+      
+   if [ $return_code -eq 0 ]; then
+      echo "SCP completed with return code 0"
+      exit 0
    else
-      echo "Could not fetch file $gpufile"
+      echo "Could not scp file $gpufile from host $file_host"
       exit 1
    fi
 done
 
-exit 0
+exit 1
+

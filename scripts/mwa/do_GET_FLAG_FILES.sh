@@ -27,6 +27,22 @@ if [ ! $flag_file ]; then
    
 else
    echo "Flag file found, extracting $flag_file"
-   unzip /nfs$flag_file -d $pwd/$obs
+   file_host=$( echo $flag_file | awk -F'/' '{print $2}' )
+   scp $file_host:$flag_file ./
+   return_code=$?
+                  
+   if [ $return_code -ne 0 ]; then
+      echo "Could not grab $flag_file from host : $file_host"
+      exit 1
+   fi
+      
+   unzip *.zip
+   return_code=$?
+                  
+   if [ $return_code -ne 0 ]; then
+      echo "Could not unzip flag file $flag_file"
+      exit 1
+   fi
+
    exit 0  
 fi

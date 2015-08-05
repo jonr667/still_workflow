@@ -22,7 +22,7 @@ if [ -f gpu_file_locations_list_$obs.txt ]; then
 fi
 
 for file in $file_locations; do
-   echo "/nfs$file" >> gpu_file_locations_list_$obs.txt
+   echo "$file" >> gpu_file_locations_list_$obs.txt
 done
 
 line_count=$(cat gpu_file_locations_list_$obs.txt | wc -l)
