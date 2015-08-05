@@ -293,7 +293,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                     continue
 
                 while len(self.get_launched_actions(tm, tx=False)) < tm_info.max_num_of_tasks:  # I think this will work
-                    action_from_queue = self.pop_action_queue(tm, tx=False)
+                    action_from_queue = self.pop_action_queue(tm, tx=False)  # FIXME: MIght still be having a small issue when a TM goes offline and back on
                     if action_from_queue is not False:
                         if self.launch_action(action_from_queue) != "OK":  # If we had a connection error stop trying until TM checks back in
                             break
@@ -337,7 +337,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
     def pop_action_queue(self, still, tx=False):
         '''Return highest priority action for the given still.'''
         # Seems like we're going through all the actions to find the ones for the particular still..
-        # Should think about obtimizing at some point
+        # Should think about optimizing at some point
 
         for i in xrange(len(self.action_queue)):
             a = self.action_queue[i]
@@ -429,6 +429,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             myobs_info = self.dbi.get_obs(myobs)
             if myobs_info.current_stage_in_progress == "FAILED" or myobs_info.status == "COMPLETE" or (myobs_info.stillhost not in self.task_clients and myobs_info.stillhost):
                 self.active_obs.remove(myobs)
+                logger.debug("update_action_queue: Removing obsid : %s, task : %s, Status: %s, TM: %s" % (myobs_info.obsnum, myobs_info.current_stage_in_progress, myobs_info.status, myobs_info.stillhost))
             else:
                 myaction = self.get_action(myobs, ActionClass=ActionClass, action_args=action_args)
                 if (myaction is not None) and (self.already_launched(myaction) is not True):
@@ -491,7 +492,8 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                 still = self.tm_cycle.next().hostname  # Balance out all the nodes on startup
             else:
                 still = self.obs_to_still(obsnum)  # Get a still for a new obsid if one doesn't already exist.
-                self.dbi.set_obs_still_host(obsnum, still)
+            self.dbi.set_obs_still_host(obsnum, still)  # Assign the still to the obsid
+
             if self.lock_all_neighbors_to_same_still == 1 and self.wf.neighbors == 1:
                 for neighbor in self.get_all_neighbors(obsnum):
                     self.dbi.set_obs_still_host(neighbor, still)

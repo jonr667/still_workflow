@@ -372,7 +372,7 @@ class TaskServer(HTTPServer):
                     try:
                         child_proc = mytask.process.children()[0]
                         if psutil.pid_exists(child_proc.pid):
-                            logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%%, mem={mem:.1f}%%, Naffinity={aff}'.format(
+                            logger.debug('Proc info on {obsnum}:{task}:{pid} - cpu={cpu:.1f}%, mem={mem:.1f}%, Naffinity={aff}'.format(
                                 obsnum=mytask.obs, task=mytask.task, pid=child_proc.pid, cpu=child_proc.cpu_percent(interval=1.0),
                                 mem=child_proc.memory_percent(), aff=len(child_proc.cpu_affinity())))
                     except:
