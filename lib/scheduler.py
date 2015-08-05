@@ -298,7 +298,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                         if self.launch_action(action_from_queue) != "OK":  # If we had a connection error stop trying until TM checks back in
                             break
                     else:
-                        logger.info("No actions available for TaskManager : %s" % tm)
+                        print("No actions available for TaskManager : %s") % tm
                         break
 
             self.clean_completed_actions(self.dbi)
