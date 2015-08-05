@@ -21,14 +21,11 @@ for gpufile in $( cat gpu_file_locations_list_$obs.txt ); do
    scp $file_host:$gpufile ./
    return_code=$?
       
-   if [ $return_code -eq 0 ]; then
-      echo "SCP completed with return code 0"
-      exit 0
-   else
+   if [ $return_code -ne 0 ]; then
       echo "Could not scp file $gpufile from host $file_host"
       exit 1
    fi
 done
 
-exit 1
+exit 0
 
