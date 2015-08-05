@@ -16,6 +16,10 @@ real_prod_dir=$(echo $production_dir | cut -f 2 -d '/' --complement)
 #if [ ! -d $real_prod_dir ]; then
 #   echo "Creating directory : $real_prod_dir"
 #   mkdir -p $real_prod_dir
+#  if [ $? -ne 0 ]; do
+#    echo "Mkdir -p $real_prod_dir failed"
+#    exit 1
+#  fi
 #fi
 
 if [ ! $1 ]; then
