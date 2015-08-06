@@ -8,6 +8,7 @@ import socket
 import datetime
 import signal
 import copy
+import pickle
 
 # import numpy as np
 from itertools import cycle
@@ -143,29 +144,27 @@ class MonitorHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
         if parsed_path.path == "/":
-
             message = ""
-            obs_info_dict = {}
-
+            open_obs_count = len(self.server.dbi.list_open_observations())
+            failed_obs_count = len(self.server.dbi.list_observations_with_cur_stage('FAILED'))
+            completed_obs_count = len(self.server.dbi.list_observations_with_status('COMPLETE'))
+            message += "Open Obs count: %s  -  Completed Obs count : %s  -  Failed Obs count: %s \n\n" % \
+                       (open_obs_count, completed_obs_count, failed_obs_count)
             for still in self.server.launched_actions:
-                message += still + "\n"
-                data_on_tasks = self.get_from_server(still, "INFO_TASKS")
-                for line in data_on_tasks.split('\n'):   # Process each line from the taskmanager relating to its current procs
-                    obs_info_dict.update({line.split(':', 1)[0]: str(line)})
-                # FIXME!!!!
-                # I am working off of the schedulers list of processes when I should just be getting that completely
-                # from the task manager.  OR loading the tasks returned from the TM on recovery
-                # Some tasks won't show up after recovery
-                #
+                tm_info = self.server.dbi.get_still_info(still)
+                message += "Host: %s - CPU Count: %s - Load: %s - Memory(used/tot): %s/%s GB - Task#(cur/max): %s/%s \n\n" % \
+                           (still, tm_info.number_of_cores, tm_info.current_load, (tm_info.total_memory - tm_info.free_memory),
+                            tm_info.total_memory, tm_info.cur_num_of_tasks, tm_info.max_num_of_tasks)
+                pickled_data_on_tasks = self.get_from_server(still, "INFO_TASKS")
+                mydict = pickle.loads(pickled_data_on_tasks)
 
-                for myaction in self.server.launched_actions[still]:
-                    try:
-                        message += "   Observation # : " + myaction.obs + " - Current Task : " + myaction.task + \
-                                   " - CPU Usage : " + obs_info_dict[myaction.obs].split(':')[3] + \
-                                   " - Mem Usage : " + str(int(obs_info_dict[myaction.obs].split(':')[4]) / 1024 / 1024) + "MB" + \
-                                   " - Time : " + obs_info_dict[myaction.obs].split(':')[5] + 's' + "\n"
-                    except:
-                        pass
+                for mytask in mydict:
+                    dt = datetime.timedelta(seconds=(int(time.time() - mytask['start_time'])))
+                    dt_list = dt.days, dt.seconds // 3600, (dt.seconds // 60) % 60
+                    message += "  * Obsnum: %s  -  Task: %s  -  Proc Status: %s  -  CPU: %s  -  Mem: %sMB  -  Runtime: %sd %sh %sm \n" % \
+                               (mytask['obsnum'], mytask['task'], mytask['proc_status'],
+                                mytask['cpu_percent'], mytask['mem_used'] / (1024 ** 2), dt_list[0], dt_list[1], dt_list[2])
+                message += '\n'
             self.wfile.write(message)
             self.wfile.write('\n')
         return
@@ -250,10 +249,12 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             logger.info("Removing offline TaskManager : %s" % tm_info.hostname)
             self.launched_actions.pop(tm_info.hostname, None)
             self.task_clients.pop(tm_info.hostname, None)
-            for obsnum in self.dbi.get_obs_assigned_to_still(tm_info.hostname):
-                if obsnum in self.active_obs_dict:
-                    self.active_obs_dict.pop(obsnum)
-                    self.active_obs.remove(obsnum)
+            for obs in self.dbi.get_obs_assigned_to_still(tm_info.hostname):
+
+                if obs.obsnum in self.active_obs_dict:
+                    self.active_obs_dict.pop(obs.obsnum)
+                    self.active_obs.remove(obs.obsnum)
+
             return False
 
         elif tm_info.cur_num_of_tasks >= tm_info.max_num_of_tasks:  # Check to ensure we are not at max # of tasks for the taskmanager
@@ -285,6 +286,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             self.ext_command_hook()
             self.get_new_active_obs()
             self.update_action_queue(ActionClass, action_args)
+
             launched_actions_copy = copy.copy(self.launched_actions)
             # Launch actions that can be scheduled
             for tm in launched_actions_copy:
@@ -407,11 +409,11 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         '''Check for any new obs that may have appeared.  Actions for
         these obs may potentially take priority over ones currently
         active.'''
-        # XXX If actions have been launched since the last time this
-        # was called, clean_completed_actions() must be called first to ensure
-        # that cleanup occurs before.  Is this true? if so, should add mechanism
-        # to ensure ordering
-        observations = self.dbi.list_open_observations()  # Get only observations that are NOT :  NEW OR COMPLETE
+
+        observations = []
+        observations += self.dbi.list_open_observations_on_tm()
+        for tm_name in self.launched_actions:
+            observations += self.dbi.list_open_observations_on_tm(tm_hostname=tm_name)
 
         for open_obs in observations:
             if open_obs not in self.active_obs_dict:
@@ -428,7 +430,9 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         for myobs in self.active_obs:
             myobs_info = self.dbi.get_obs(myobs)
             if myobs_info.current_stage_in_progress == "FAILED" or myobs_info.status == "COMPLETE" or (myobs_info.stillhost not in self.task_clients and myobs_info.stillhost):
-                self.active_obs.remove(myobs)
+                self.active_obs_dict.pop(myobs_info.obsnum)
+                self.active_obs.remove(myobs_info.obsnum)
+
                 logger.debug("update_action_queue: Removing obsid : %s, task : %s, Status: %s, TM: %s" % (myobs_info.obsnum, myobs_info.current_stage_in_progress, myobs_info.status, myobs_info.stillhost))
             else:
                 myaction = self.get_action(myobs, ActionClass=ActionClass, action_args=action_args)

@@ -2,7 +2,6 @@ import threading
 import time
 import socket
 import os
-import tempfile
 import platform
 import urlparse
 import cgi
@@ -11,6 +10,7 @@ import urllib
 import sys
 import psutil
 import pickle
+import subprocess
 
 from string import upper
 
@@ -37,7 +37,6 @@ class Task:
         self.dbi = dbi
         self.cwd = cwd
         self.process = None
-        self.OUTFILE = tempfile.TemporaryFile()
         self.outfile_counter = 0
         self.path_to_do_scripts = path_to_do_scripts
         self.ts = TaskServer
@@ -57,18 +56,16 @@ class Task:
         process = None
 
         logger.info('Task._run: (%s, %s) %s cwd=%s' % (self.task, self.obs, ' '.join(['do_%s.sh' % self.task] + self.args), self.cwd))
-        # create a temp file descriptor for stdout and stderr
-        self.OUTFILE = tempfile.TemporaryFile()
-        self.outfile_counter = 0
 
-        current_env = os.environ            # Combine the current environment that the TaskManager is running in with any additional ones for the do_ script specified in conf file
+        current_env = os.environ  # Combine the current environment that the TaskManager is running in with any additional ones for the do_ script specified in conf file
         global_env_vars = {'obsnum': self.obs, 'task': self.task}
         self.full_env = current_env.copy()
         self.full_env.update(self.custom_env_vars)
         self.full_env.update(global_env_vars)
 
         try:
-            process = psutil.Popen(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args, cwd=self.cwd, env=self.full_env, stderr=self.OUTFILE, stdout=self.OUTFILE)
+            process = psutil.Popen(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args,
+                                   cwd=self.cwd, env=self.full_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         except Exception:
             logger.exception('Task._run: (%s,%s) error="%s"' % (self.task, self.obs, ' '.join(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args)))
             self.record_failure()
@@ -88,30 +85,18 @@ class Task:
             logger.exception("Could not update database")
         return process
 
-    def poll(self):
-        # logger.debug('Task.pol: (%s,%s)  reading to log position %d'%(self.task,self.obs,self.outfile_counter))
-        if self.process is None:
-            return None
-        self.OUTFILE.seek(self.outfile_counter)
-        logtext = self.OUTFILE.read()
-
-        if len(logtext) > self.outfile_counter:
-            # logger.debug('Task.pol: ({task},{obsnum}) adding {d} log characeters'.format(task=self.task, obsnum=self.obs, d=len(logtext)))
-            logger.debug("Output -> Task : %s, Obsnum: %s, Output: %s" % (self.task, self.obs, logtext))
-            self.dbi.update_log(self.obs, self.task, logtext=logtext, exit_status=self.process.poll())
-            self.outfile_counter += len(logtext)
-        return self.process.poll()
-
     def finalize(self):
-        logger.info('Task.finalize waiting: ({task},{obsnum})'.format(task=self.task, obsnum=self.obs))
-        self.process.communicate()
+        task_output = self.process.communicate()[0]
+        task_return_code = self.process.returncode
 
-        logger.debug('Task.finalize closing out log: ({task},{obsnum})'.format(task=self.task, obsnum=self.obs))
-        self.dbi.update_log(self.obs, exit_status=self.process.poll())
-        if self.poll():  # Will return the exit status
+        self.dbi.update_log(self.obs, status=self.task, logtext=task_output, exit_status=task_return_code)
+        if task_return_code != 0:  # If the task didn't return with an exit code of 0 mark as failure
+            logger.error("Task.finalize : Task Failed : Obsnum: %s , Task: %s, Exit Code: %s, OUTPUT : %s" % (self.task, self.obs, task_return_code, task_output))
             self.record_failure()
         else:
+            logger.debug("Task.finalize : Task Succeeded : Obsnum: %s , Task: %s, Exit Code: %s, OUTPUT : %s" % (self.task, self.obs, task_return_code, task_output))
             self.record_completion()
+        return
 
     def kill(self):
         self.record_failure(failure_type="KILLED")
@@ -156,6 +141,7 @@ class TaskClient:
         ###
         #
         # This function along with the recieve should both to redone to pass the data via XML
+        #
         ###
 
         conn_headers = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain"}
@@ -261,21 +247,20 @@ class TaskHandler(BaseHTTPRequestHandler):
                 self.send_response(400)  # Return a response of 200, OK to the client
                 self.end_headers()
         elif upper(parsed_path.path) == "/INFO_TASKS":
-            message = ""
+            task_info_dict = []
             for mytask in self.server.active_tasks:  # Jon : !!CHANGE THIS TO USE A PICKLED DICT!!
                 try:
                     child_proc = mytask.process.children()[0]
                     if psutil.pid_exists(child_proc.pid):
-                        message += mytask.obs + ':' + mytask.task + ':' + str(child_proc.pid) + \
-                            ':' + str(child_proc.cpu_percent(interval=1.0)) + ':' + \
-                            str(child_proc.memory_info_ex()[0]) + ':' + str(child_proc.cpu_times()[0]) + "\n"
+                        task_info_dict.append({'obsnum': mytask.obs, 'task': mytask.task, 'pid': child_proc.pid,
+                                               'cpu_percent': child_proc.cpu_percent(interval=1.0), 'mem_used': child_proc.memory_info_ex()[0],
+                                               'cpu_time': child_proc.cpu_times()[0], 'start_time': child_proc.create_time(), 'proc_status': child_proc.status()})
                 except:
-                    logger.exception("Trying to send response to INFO request")
-
-            self.wfile.write(message)
+                    logger.exception("do_GET : Trying to send response to INFO request")
+            pickled_task_info_dict = pickle.dumps(task_info_dict)
+            self.wfile.write(pickled_task_info_dict)
 
         return
-
 
     def do_POST(self):
         task_already_exists = False
@@ -350,7 +335,7 @@ class TaskServer(HTTPServer):
             self.active_tasks_semaphore.acquire()
             new_active_tasks = []
             for mytask in self.active_tasks:
-                if mytask.poll() is None:  # not complete
+                if mytask.process.poll() is None:  # not complete
                     new_active_tasks.append(mytask)
                     try:
                         c = mytask.process.children()[0]

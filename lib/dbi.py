@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 # import hashlib
+import psutil
 import datetime
 import numpy as np
 
@@ -200,12 +201,36 @@ class DataBaseInterface(object):
 
     def list_open_observations(self):
         s = self.Session()
-        # todo tests
         try:
             obsnums = [obs.obsnum for obs in s.query(Observation).
                        filter((Observation.current_stage_in_progress != 'FAILED') | (Observation.current_stage_in_progress.is_(None))).
                        filter(Observation.status != 'NEW').
                        filter(Observation.status != 'COMPLETE').all()]
+
+        except:
+            logger.debug("No open observations found.")
+        s.close()
+        return obsnums
+
+    def list_observations_with_cur_stage(self, cur_stage):
+        s = self.Session()
+        obsnums = []
+        try:
+            obsnums = [obs.obsnum for obs in s.query(Observation).
+                       filter(Observation.current_stage_in_progress == cur_stage).all()]
+        except:
+            logger.exception("No open observations found.")
+        s.close()
+        return obsnums
+
+    def list_open_observations_on_tm(self, tm_hostname=None):
+        s = self.Session()
+        try:
+            obsnums = [obs.obsnum for obs in s.query(Observation).
+                       filter((Observation.current_stage_in_progress != 'FAILED') | (Observation.current_stage_in_progress.is_(None))).
+                       filter(Observation.status != 'NEW').
+                       filter(Observation.status != 'COMPLETE').
+                       filter(Observation.stillhost == tm_hostname).all()]
 
         except:
             logger.debug("No open observations found.")
@@ -274,7 +299,7 @@ class DataBaseInterface(object):
                 LOG.logtext = logtext
         if status is not None:
             LOG.status = status
-        # logger.debug("LOG.exit_status : %s " % LOG.exit_status)
+
         s.add(LOG)
         s.commit()
         s.close()
@@ -583,14 +608,19 @@ class DataBaseInterface(object):
             still = s.query(Still).filter(Still.hostname == hostname).one()
             still.last_checkin = datetime.datetime.now()
             still.status = status
-            still.current_load = load
+            still.current_load = psutil.cpu_percent()
+            still.number_of_cores = psutil.cpu_count()
+            still.free_memory = round(psutil.virtual_memory().free / (1024 ** 3), 2)
+            still.total_memory = round(psutil.virtual_memory().total / (1024 ** 3), 2)
             still.data_dir = data_dir
             still.port = port
             still.max_num_of_tasks = max_tasks
             still.cur_num_of_tasks = cur_tasks
             s.add(still)
         else:  # Still doesn't exist, lets add it
-            still = Still(hostname=hostname, ip_addr=ip_addr, port=port, current_load=load, data_dir=data_dir, status=status, max_num_of_tasks=max_tasks, cur_num_of_tasks=cur_tasks)
+            still = Still(hostname=hostname, ip_addr=ip_addr, port=port, current_load=load,
+                          data_dir=data_dir, status=status, max_num_of_tasks=max_tasks, cur_num_of_tasks=cur_tasks,
+                          free_memory=still.mem_free, total_memory=still.total_memory, number_of_cores=still.numer_of_cores)
             s.add(still)
 
         s.commit()
