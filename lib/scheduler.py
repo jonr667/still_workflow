@@ -152,7 +152,7 @@ class MonitorHandler(BaseHTTPRequestHandler):
                        (open_obs_count, completed_obs_count, failed_obs_count)
             for still in self.server.launched_actions:
                 tm_info = self.server.dbi.get_still_info(still)
-                message += "Host: %s - CPU Count: %s%%  - Load: %s%%  - Memory(used/tot): %s/%s GB - Task#(cur/max): %s/%s \n\n" % \
+                message += "Host: %s - CPU Count: %s  - Load: %s%%  - Memory(used/tot): %s/%s GB - Task#(cur/max): %s/%s \n\n" % \
                            (still, tm_info.number_of_cores, tm_info.current_load, (tm_info.total_memory - tm_info.free_memory),
                             tm_info.total_memory, tm_info.cur_num_of_tasks, tm_info.max_num_of_tasks)
                 pickled_data_on_tasks = self.get_from_server(still, "INFO_TASKS")
@@ -161,7 +161,7 @@ class MonitorHandler(BaseHTTPRequestHandler):
                 for mytask in mydict:
                     dt = datetime.timedelta(seconds=(int(time.time() - mytask['start_time'])))
                     dt_list = dt.days, dt.seconds // 3600, (dt.seconds // 60) % 60
-                    message += "  * Obsnum: %s  -  Task: %s  -  Proc Status: %s  -  CPU: %s  -  Mem: %sMB  -  Runtime: %sd %sh %sm \n" % \
+                    message += "  * Obsnum: %s  -  Task: %s  -  Proc Status: %s  -  CPU: %s%%  -  Mem: %sMB  -  Runtime: %sd %sh %sm \n" % \
                                (mytask['obsnum'], mytask['task'], mytask['proc_status'],
                                 mytask['cpu_percent'], mytask['mem_used'] / (1024 ** 2), dt_list[0], dt_list[1], dt_list[2])
                 message += '\n'
