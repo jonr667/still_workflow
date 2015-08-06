@@ -11,13 +11,6 @@ TODO:
 
 * Check free disk space for data_dir, make sure it doesn't go below 10% free or some such
 
-* Want better recovery, be able to pop severs out easily and know the exact ramifications and if its been too long
-   we should just start the task over again on a new server, assuming the still has nothing better to do
-   
-* Check that path to log file and data directories exist
-
-* Add support for environment variables to be passed to tasks and setup in config file
-
 Prereqs:
 
 pip install configparser
