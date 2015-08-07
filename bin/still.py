@@ -64,6 +64,7 @@ class SpawnerClass:
         self.logger = ''
         self.env_vars = ''
         self.ip_addr = ''
+        self.cluster_scheduler = 0
 
     def preflight_check_scheduler(self):
         # Nothing to do here at the moment, just a place holder
@@ -195,6 +196,7 @@ def process_client_config_file(sg, wf):
         sg.block_size = int(get_config_entry(config, 'Still', 'block_size', reqd=False, remove_spaces=True))
         sg.actions_per_still = int(get_config_entry(config, 'Still', 'actions_per_still', reqd=False, remove_spaces=True, default_val=8))
         sg.sleep_time = int(get_config_entry(config, 'Still', 'sleep_time', reqd=False, remove_spaces=True))
+        sg.cluster_scheduler = int(get_config_entry(config, 'Still', 'cluster_scheduler', reqd=False, remove_spaces=True))
         sg.log_path = get_config_entry(config, 'Still', 'log_path', reqd=False, remove_spaces=False, default_val=basedir + 'log/')
 
         if "ScriptEnvironmentVars" in config_sections:  # Read in allow the env vars for the do_ scripts
