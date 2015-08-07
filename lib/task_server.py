@@ -335,7 +335,13 @@ class TaskServer(HTTPServer):
             self.active_tasks_semaphore.acquire()
             new_active_tasks = []
             for mytask in self.active_tasks:
-                if mytask.process.poll() is None:  # not complete
+                try:
+                    poll_status = mytask.process.poll()  # race condition due to threading, might fix later
+                except:
+                    poll_status = None
+                    time.sleep(2)
+
+                if poll_status is None:  # not complete
                     new_active_tasks.append(mytask)
                     try:
                         c = mytask.process.children()[0]
