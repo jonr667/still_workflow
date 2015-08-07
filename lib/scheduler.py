@@ -147,9 +147,10 @@ class MonitorHandler(BaseHTTPRequestHandler):
             message = ""
             open_obs_count = len(self.server.dbi.list_open_observations())
             failed_obs_count = len(self.server.dbi.list_observations_with_cur_stage('FAILED'))
+            killed_obs_count = len(self.server.dbi.list_observations_with_cur_stage('KILLED'))
             completed_obs_count = len(self.server.dbi.list_observations_with_status('COMPLETE'))
-            message += "Open Obs count: %s  -  Completed Obs count : %s  -  Failed Obs count: %s \n\n" % \
-                       (open_obs_count, completed_obs_count, failed_obs_count)
+            message += "Open Obs count: %s  -  Completed Obs count : %s  -  Failed Obs count: %s  -  Killed Obs count: %s\n\n" % \
+                       (open_obs_count, completed_obs_count, failed_obs_count, killed_obs_count)
             for still in self.server.launched_actions:
                 tm_info = self.server.dbi.get_still_info(still)
                 message += "Host: %s - CPU Count: %s  - Load: %s%%  - Memory(used/tot): %s/%s GB - Task#(cur/max): %s/%s \n\n" % \
@@ -429,7 +430,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         actions = []
         for myobs in self.active_obs:
             myobs_info = self.dbi.get_obs(myobs)
-            if myobs_info.current_stage_in_progress == "FAILED" or myobs_info.status == "COMPLETE" or (myobs_info.stillhost not in self.task_clients and myobs_info.stillhost):
+            if myobs_info.current_stage_in_progress == "FAILED" or myobs_info.current_stage_in_progress == "KILLED" or myobs_info.status == "COMPLETE" or (myobs_info.stillhost not in self.task_clients and myobs_info.stillhost):
                 self.active_obs_dict.pop(myobs_info.obsnum)
                 self.active_obs.remove(myobs_info.obsnum)
 
@@ -457,7 +458,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         obsinfo = self.dbi.get_obs(obsnum)
         status = obsinfo.status
 
-        if obsinfo.current_stage_in_progress == "FAILED":
+        if obsinfo.current_stage_in_progress == "FAILED" or obsinfo.current_stage_in_progress == "KILLED":
             return None
 
         if status == 'COMPLETE':

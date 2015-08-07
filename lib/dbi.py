@@ -204,6 +204,7 @@ class DataBaseInterface(object):
         try:
             obsnums = [obs.obsnum for obs in s.query(Observation).
                        filter((Observation.current_stage_in_progress != 'FAILED') | (Observation.current_stage_in_progress.is_(None))).
+                       filter((Observation.current_stage_in_progress != 'KILLED') | (Observation.current_stage_in_progress.is_(None))).
                        filter(Observation.status != 'NEW').
                        filter(Observation.status != 'COMPLETE').all()]
 
@@ -228,6 +229,7 @@ class DataBaseInterface(object):
         try:
             obsnums = [obs.obsnum for obs in s.query(Observation).
                        filter((Observation.current_stage_in_progress != 'FAILED') | (Observation.current_stage_in_progress.is_(None))).
+                       filter((Observation.current_stage_in_progress != 'KILLED') | (Observation.current_stage_in_progress.is_(None))).
                        filter(Observation.status != 'NEW').
                        filter(Observation.status != 'COMPLETE').
                        filter(Observation.stillhost == tm_hostname).all()]
