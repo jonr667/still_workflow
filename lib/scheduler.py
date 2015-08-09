@@ -298,7 +298,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                 while len(self.get_launched_actions(tm, tx=False)) < tm_info.max_num_of_tasks:  # I think this will work
                     action_from_queue = self.pop_action_queue(tm, tx=False)  # FIXME: MIght still be having a small issue when a TM goes offline and back on
                     if action_from_queue is not False:
-                        if self.launch_action(action_from_queue) != "OK":  # If we had a connection error stop trying until TM checks back in
+                        if self.launch_action(action_from_queue)[0] != "OK":  # If we had a connection error stop trying until TM checks back in
                             break
                     else:
                         # print("No actions available for TaskManager : %s") % tm
