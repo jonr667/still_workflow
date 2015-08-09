@@ -27,7 +27,7 @@ FAIL_ON_ERROR = 1
 
 
 class Task:
-    def __init__(self, task, obs, still, args, dbi, TaskServer, cwd='.', path_to_do_scripts=".", custom_env_vars={}):
+    def __init__(self, task, obs, still, args, drmma_args, drmma_queue, dbi, TaskServer, cwd='.', path_to_do_scripts=".", custom_env_vars={}):
         self.task = task
         self.obs = obs
         self.still = still
@@ -40,7 +40,12 @@ class Task:
         self.outfile_counter = 0
         self.path_to_do_scripts = path_to_do_scripts
         self.ts = TaskServer
+        self.jid = None
         self.sg = TaskServer.sg
+        self.drmma_stdout_file = ''
+        self.drmma_stderr_file = ''
+        self.drmma_args = drmma_args
+        self.drmma_queue = drmma_queue
 
     def run(self):
         if self.process is not None:
@@ -51,6 +56,30 @@ class Task:
         else:
             self.record_launch()
         return
+
+    def run_popen(self):
+        process = psutil.Popen(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args,
+                               cwd=self.cwd, env=self.full_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        try:
+            process.nice(2)  # Jon : I want to set all the processes evenly so they don't compete against core OS functionality (ssh, cron etc..) slowing things down.
+            if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
+                process.cpu_affinity(range(psutil.cpu_count()))
+        except:
+            logger.exception("Could not set cpu affinity")
+        return
+
+    def run_drmma(self):
+        jt = s.createJobTemplate()
+        jt.remoteCommand = "%s/do_%s.sh" % (self.path_to_do_scripts, self.task)
+        self.drmma_stdout_file = "%s/myuniquefile.stdout" % (self.ts.data_dir)
+        self.drmma_stderr_file = "%s/myuniquefile.stderr" % (self.ts.data_dir)
+
+        jt.nativeSpecification = "-q %s -o %s -e %s %s" % (self.drmma_queue, self.drmma_stdout_file, self.drmma_stderr_file, self.drmma_args)
+        jt.args = self.args
+        jt.joinFiles = True
+
+        jid = s.runJob(jt)  # Get the Job ID
+        return jid
 
     def _run(self):
         process = None
@@ -64,19 +93,17 @@ class Task:
         self.full_env.update(global_env_vars)
 
         try:
-            process = psutil.Popen(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args,
-                                   cwd=self.cwd, env=self.full_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            if self.sg.cluster_scheduler == 1:  # Do we need to interface with a cluster scheduler?
+                self.jid = self.run_drmma()  # Yup
+            else:
+                self.run_popen()  # Use Popen to run a normal process
+
         except Exception:
             logger.exception('Task._run: (%s,%s) error="%s"' % (self.task, self.obs, ' '.join(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args)))
             self.record_failure()
             if FAIL_ON_ERROR == 1:
                 self.ts.shutdown()
-        try:
-            process.nice(2)  # Jon : I want to set all the processes evenly so they don't compete against core OS functionality (ssh, cron etc..) slowing things down.
-            if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
-                process.cpu_affinity(range(psutil.cpu_count()))
-        except:
-            logger.exception("Could not set cpu affinity")
+
 
         try:
             self.dbi.update_obs_current_stage(self.obs, self.task)
@@ -155,9 +182,20 @@ class TaskClient:
             conn_path = "/NEW_TASK"
             args = self.gen_args(task, obs)
             args_string = ' '.join(args)
+            drmma_args_string = self.gen_drmma_args(task, obs)
+            if self.wf.drmma_queue_by_task[task]:
+                drmma_queue = self.wf.drmma_queue_by_task[task]
+            else:
+                drmma_queue = self.wf.default_drmma_queue
+
             pickled_env_vars = pickle.dumps(self.sg.env_vars)
-            conn_params = urllib.urlencode({'obsnum': obs, 'task': task, 'args': args_string, 'env_vars': pickled_env_vars})
-            logger.debug('TaskClient.transmit: sending (%s,%s) with args=%s' % (task, obs, args_string))
+            conn_params = urllib.urlencode({'obsnum': obs,
+                                            'task': task,
+                                            'args': args_string,
+                                            'drmma_args': drmma_args_string,
+                                            'drmma_queue': drmma_queue,
+                                            'env_vars': pickled_env_vars})
+            logger.debug('TaskClient.transmit: sending (%s,%s) with args=%s drmma_args=%s' % (task, obs, args_string, drmma_args_string))
 
         elif action_type == "KILL_TASK":
             conn_type = "GET"
@@ -187,6 +225,11 @@ class TaskClient:
             status = "OK"
             logger.debug("Connection status : %s : %s" % (response_status, response_reason))
         return status, self.error_count
+
+    def gen_drmma_args(self, task, obs):
+        args = []
+        args = self.wf.action_args[task]
+        return args
 
     def gen_args(self, task, obs):
         args = []
@@ -275,6 +318,8 @@ class TaskHandler(BaseHTTPRequestHandler):
             obsnum = str(form.getfirst("obsnum", ""))
             still = form.getfirst("still", "")
             args = form.getfirst("args", "").split(' ')
+            drmma_args = form.getfirst("drmma_args", "").split(' ')
+            drmma_queue = form.getfirst("drmma_queue", "")
             pickled_env_vars = form.getfirst("env_vars", "")  # Will be coming in pickled, might want to do the same for args
             env_vars = pickle.loads(pickled_env_vars)  # depickled env_vars, should now be a dict
 
@@ -291,7 +336,7 @@ class TaskHandler(BaseHTTPRequestHandler):
                     break
 
             if task_already_exists is False:
-                t = Task(task, obsnum, still, args, self.server.dbi, self.server, self.server.data_dir, self.server.path_to_do_scripts, custom_env_vars=env_vars)
+                t = Task(task, obsnum, still, args, drmma_args, drmma_queue, self.server.dbi, self.server, self.server.data_dir, self.server.path_to_do_scripts, custom_env_vars=env_vars)
                 self.server.append_task(t)
                 t.run()
         return
@@ -315,6 +360,7 @@ class TaskServer(HTTPServer):
         self.port = port
         self.path_to_do_scripts = path_to_do_scripts
         self.logger = sg.logger
+        self.drmma_session = ''
 
         # signal.signal(signal.SIGINT, self.signal_handler)  # Enabled clean shutdown after Cntrl-C event.
 
@@ -412,7 +458,10 @@ class TaskServer(HTTPServer):
         t.start()
         logger.debug('Starting Task Server')
         logger.debug("using code at: " + __file__)
-
+        if self.sg.cluster_schedule == 1:
+            import drmaa
+            self.drmma_session = drmaa.Session()  # Start the interface session to DRMAA to control GridEngine
+            self.drmma_session.initialize()
         try:
             # Setup a thread that just updates the last checkin time for this still every 5min
             timer_thread = threading.Thread(target=self.checkin_timer)
@@ -440,4 +489,5 @@ class TaskServer(HTTPServer):
             logger.debug("Killing with gusto -> Pid: %s - Proc: %s" % (proc.pid, proc.name))
             proc.kill()
         HTTPServer.shutdown(self)
+        self.drmma_session.exit()
         sys.exit(0)

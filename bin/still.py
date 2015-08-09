@@ -32,6 +32,9 @@ class WorkFlow:
         self.prioritize_obs = 0
         self.neighbors = 0
         self.still_locked_after = ''
+        self.drmma_args = []   # I think this will be useful but will want to be cautious of -o and -e being passed overriding our settings.
+        self.default_drmma_queue = ''
+        self.drmma_queue_by_task = []
 #        self.start_trigger_status_state = ''
 
 
@@ -206,7 +209,8 @@ def process_client_config_file(sg, wf):
         wf.workflow_actions = tuple(get_config_entry(config, 'WorkFlow', 'actions', reqd=True, remove_spaces=True).split(","))
         wf.workflow_actions_endfile = tuple(get_config_entry(config, 'WorkFlow', 'actions_endfile', reqd=False, remove_spaces=True).split(","))
         wf.prioritize_obs = int(get_config_entry(config, 'WorkFlow', 'prioritize_obs', reqd=False, remove_spaces=True, default_val=0))
-        wf.still_locked_after = get_config_entry(config, 'WorkFlow', 'still_locked_after', reqd=False, remove_spaces=True)
+        wf.still_locked_after = get_config_entry(config, 'WorkFlow', 'still_locked_after', reqd=False, remove_spaces=True)  # Do I still use this?
+        wf.default_drmma_queue = get_config_entry(config, 'WorkFlow', 'default_drmma_queue', reqd=False, remove_spaces=True)
         wf.neighbors = int(get_config_entry(config, 'WorkFlow', 'neighbors', reqd=False, remove_spaces=False, default_val=0))
         wf.lock_all_neighbors_to_same_still = int(get_config_entry(config, 'WorkFlow', 'lock_all_neighbors_to_same_still', reqd=False, remove_spaces=False, default_val=0))
 
@@ -217,6 +221,8 @@ def process_client_config_file(sg, wf):
 
                 wf.action_prereqs[action] = get_config_entry(config, action, 'prereqs', reqd=False, remove_spaces=True).split(",")
                 wf.action_args[action] = get_config_entry(config, action, 'args', reqd=False, remove_spaces=False)
+                wf.drmma_args[action] = get_config_entry(config, action, 'drmaa_args', reqd=False, remove_spaces=False)
+                wf.drmma_queue_by_task = get_config_entry(config, action, 'drmaa_queue', reqd=False, remove_spaces=False)
     else:
         print("Config file does not appear to exist : %s") % sg.config_file
         sys.exit(1)
