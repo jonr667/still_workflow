@@ -71,10 +71,9 @@ class Task:
     def run_drmma(self):
         jt = s.createJobTemplate()
         jt.remoteCommand = "%s/do_%s.sh" % (self.path_to_do_scripts, self.task)
-        self.drmma_stdout_file = "%s/myuniquefile.stdout" % (self.ts.data_dir)
-        self.drmma_stderr_file = "%s/myuniquefile.stderr" % (self.ts.data_dir)
+        self.drmma_stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.data_dir, self.obs, self.task)
 
-        jt.nativeSpecification = "-q %s -o %s -e %s %s" % (self.drmma_queue, self.drmma_stdout_file, self.drmma_stderr_file, self.drmma_args)
+        jt.nativeSpecification = "-q %s -eo %s %s" % (self.drmma_queue, self.drmma_stdout_stderr_file, self.drmma_args)
         jt.args = self.args
         jt.joinFiles = True
 
@@ -93,6 +92,7 @@ class Task:
         self.full_env.update(global_env_vars)
 
         try:
+
             if self.sg.cluster_scheduler == 1:  # Do we need to interface with a cluster scheduler?
                 self.jid = self.run_drmma()  # Yup
             else:
@@ -104,12 +104,14 @@ class Task:
             if FAIL_ON_ERROR == 1:
                 self.ts.shutdown()
 
-
         try:
+
             self.dbi.update_obs_current_stage(self.obs, self.task)
             self.dbi.add_log(self.obs, self.task, ' '.join(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args + ['\n']), None)
+
         except:
             logger.exception("Could not update database")
+
         return process
 
     def finalize(self):
@@ -369,9 +371,22 @@ class TaskServer(HTTPServer):
         logger.debug("Port : %s" % self.port)
 
     def append_task(self, t):
-        self.active_tasks_semaphore.acquire()
+        self.active_tasks_semaphore.acquire()  # Jon : Not sure why we're doing this, we only have one primary thread
         self.active_tasks.append(t)
         self.active_tasks_semaphore.release()
+
+    def poll_task_status(self, task):
+        if self.sg.cluster_scheduler == 1:  # Do we need to interface with a cluster scheduler?
+            retval = s.wait(task.jid, drmaa.Session.TIMEOUT_NO_WAIT)
+            # attributes: retval. :  jobId, hasExited, hasSignal, terminatedSignal, hasCoreDump, wasAborted, exitStatus, and resourceUsage
+
+        else:
+            try:
+                poll_status = task.process.poll()  # race condition due to threading, might fix later
+            except:
+                poll_status = None
+                time.sleep(2)
+        return poll_status
 
     def finalize_tasks(self, poll_interval=5.):
         self.user_input = InputThread()
@@ -381,21 +396,9 @@ class TaskServer(HTTPServer):
             self.active_tasks_semaphore.acquire()
             new_active_tasks = []
             for mytask in self.active_tasks:
-                try:
-                    poll_status = mytask.process.poll()  # race condition due to threading, might fix later
-                except:
-                    poll_status = None
-                    time.sleep(2)
 
-                if poll_status is None:  # not complete
-                    new_active_tasks.append(mytask)
-                    try:
-                        c = mytask.process.children()[0]
-                        # Check the affinity!
-                        if PLATFORM != "Darwin" and len(c.cpu_affinity()) < psutil.cpu_count():  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
-                            c.cpu_affinity(range(psutil.cpu_count()))
-                    except:
-                        continue
+                if self.poll_task_status(mytask) is None:
+                    new_active_tasks.append(mytask)   # I don't see the point in this.. should probably rewrite
                 else:
                     mytask.finalize()
             self.active_tasks = new_active_tasks
