@@ -69,7 +69,7 @@ class Task:
         return
 
     def run_drmma(self):
-        jt = s.createJobTemplate()
+        jt = self.ts.drmma_session.createJobTemplate()
         jt.remoteCommand = "%s/do_%s.sh" % (self.path_to_do_scripts, self.task)
         self.drmma_stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.data_dir, self.obs, self.task)
 
@@ -115,8 +115,12 @@ class Task:
         return process
 
     def finalize(self):
-        task_output = self.process.communicate()[0]
-        task_return_code = self.process.returncode
+        if self.sg.cluster_scheduler == 1:
+            task_output = 1
+            task_return_code = 1
+        else:
+            task_output = self.process.communicate()[0]
+            task_return_code = self.process.returncode
 
         self.dbi.update_log(self.obs, status=self.task, logtext=task_output, exit_status=task_return_code)
         if task_return_code != 0:  # If the task didn't return with an exit code of 0 mark as failure
@@ -377,15 +381,19 @@ class TaskServer(HTTPServer):
 
     def poll_task_status(self, task):
         if self.sg.cluster_scheduler == 1:  # Do we need to interface with a cluster scheduler?
-            retval = s.wait(task.jid, drmaa.Session.TIMEOUT_NO_WAIT)
+            task_info = self.drmma_session.wait(task.jid, drmaa.Session.TIMEOUT_NO_WAIT)
+            if task_info.hasExited is True:
+                poll_status = True
+            else:
+                poll_status = None
             # attributes: retval. :  jobId, hasExited, hasSignal, terminatedSignal, hasCoreDump, wasAborted, exitStatus, and resourceUsage
-
         else:
             try:
                 poll_status = task.process.poll()  # race condition due to threading, might fix later
             except:
                 poll_status = None
                 time.sleep(2)
+
         return poll_status
 
     def finalize_tasks(self, poll_interval=5.):
