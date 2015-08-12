@@ -610,7 +610,9 @@ class DataBaseInterface(object):
             still = s.query(Still).filter(Still.hostname == hostname).one()
             still.last_checkin = datetime.datetime.now()
             still.status = status
-            still.current_load = psutil.cpu_percent()
+            print("STILL_CHECKIN, test mode, setting load = 0, change back before release")
+            still.current_load = 0
+            # still.current_load = psutil.cpu_percent()
             still.number_of_cores = psutil.cpu_count()
             still.free_memory = round(psutil.virtual_memory().free / (1024 ** 3), 2)
             still.total_memory = round(psutil.virtual_memory().total / (1024 ** 3), 2)
@@ -621,8 +623,7 @@ class DataBaseInterface(object):
             s.add(still)
         else:  # Still doesn't exist, lets add it
             still = Still(hostname=hostname, ip_addr=ip_addr, port=port, current_load=load,
-                          data_dir=data_dir, status=status, max_num_of_tasks=max_tasks, cur_num_of_tasks=cur_tasks,
-                          free_memory=still.mem_free, total_memory=still.total_memory, number_of_cores=still.numer_of_cores)
+                          data_dir=data_dir, status=status, max_num_of_tasks=max_tasks, cur_num_of_tasks=cur_tasks)
             s.add(still)
 
         s.commit()

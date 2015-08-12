@@ -27,7 +27,7 @@ FAIL_ON_ERROR = 1
 
 
 class Task:
-    def __init__(self, task, obs, still, args, drmma_args, drmma_queue, dbi, TaskServer, cwd='.', path_to_do_scripts=".", custom_env_vars={}):
+    def __init__(self, task, obs, still, args, drmaa_args, drmaa_queue, dbi, TaskServer, cwd='.', path_to_do_scripts=".", custom_env_vars={}):
         self.task = task
         self.obs = obs
         self.still = still
@@ -42,10 +42,10 @@ class Task:
         self.ts = TaskServer
         self.jid = None
         self.sg = TaskServer.sg
-        self.drmma_stdout_file = ''
-        self.drmma_stderr_file = ''
-        self.drmma_args = drmma_args
-        self.drmma_queue = drmma_queue
+        self.drmaa_stdout_file = ''
+        self.drmaa_stderr_file = ''
+        self.drmaa_args = drmaa_args
+        self.drmaa_queue = drmaa_queue
 
     def run(self):
         if self.process is not None:
@@ -66,18 +66,18 @@ class Task:
                 process.cpu_affinity(range(psutil.cpu_count()))
         except:
             logger.exception("Could not set cpu affinity")
-        return
+        return process
 
-    def run_drmma(self):
-        jt = self.ts.drmma_session.createJobTemplate()
+    def run_drmaa(self):
+        jt = self.ts.drmaa_session.createJobTemplate()
         jt.remoteCommand = "%s/do_%s.sh" % (self.path_to_do_scripts, self.task)
-        self.drmma_stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.data_dir, self.obs, self.task)
+        self.drmaa_stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.data_dir, self.obs, self.task)
 
-        jt.nativeSpecification = "-q %s -eo %s %s" % (self.drmma_queue, self.drmma_stdout_stderr_file, self.drmma_args)
+        jt.nativeSpecification = "-q %s -o %s %s" % (self.drmaa_queue, self.drmaa_stdout_stderr_file, self.drmaa_args)  # Don't forget -e as well..
         jt.args = self.args
         jt.joinFiles = True
-
-        jid = s.runJob(jt)  # Get the Job ID
+        print("RemoteCMD: %s   NativeSpec: %s   Args: %s") % (jt.remoteCommand, jt.nativeSpecification, jt.args)
+        jid = self.ts.drmaa_session.runJob(jt)  # Get the Job ID
         return jid
 
     def _run(self):
@@ -94,9 +94,10 @@ class Task:
         try:
 
             if self.sg.cluster_scheduler == 1:  # Do we need to interface with a cluster scheduler?
-                self.jid = self.run_drmma()  # Yup
+                self.jid = self.run_drmaa()  # Yup
+                process = self.jid
             else:
-                self.run_popen()  # Use Popen to run a normal process
+                process = self.run_popen()  # Use Popen to run a normal process
 
         except Exception:
             logger.exception('Task._run: (%s,%s) error="%s"' % (self.task, self.obs, ' '.join(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args)))
@@ -188,20 +189,20 @@ class TaskClient:
             conn_path = "/NEW_TASK"
             args = self.gen_args(task, obs)
             args_string = ' '.join(args)
-            drmma_args_string = self.gen_drmma_args(task, obs)
-            if self.wf.drmma_queue_by_task[task]:
-                drmma_queue = self.wf.drmma_queue_by_task[task]
+            drmaa_args_string = self.gen_drmaa_args(task, obs)
+            if self.wf.drmaa_queue_by_task[task]:
+                drmaa_queue = self.wf.drmaa_queue_by_task[task]
             else:
-                drmma_queue = self.wf.default_drmma_queue
+                drmaa_queue = self.wf.default_drmaa_queue
 
             pickled_env_vars = pickle.dumps(self.sg.env_vars)
             conn_params = urllib.urlencode({'obsnum': obs,
                                             'task': task,
                                             'args': args_string,
-                                            'drmma_args': drmma_args_string,
-                                            'drmma_queue': drmma_queue,
+                                            'drmaa_args': drmaa_args_string,
+                                            'drmaa_queue': drmaa_queue,
                                             'env_vars': pickled_env_vars})
-            logger.debug('TaskClient.transmit: sending (%s,%s) with args=%s drmma_args=%s' % (task, obs, args_string, drmma_args_string))
+            logger.debug('TaskClient.transmit: sending (%s,%s) with args=%s drmaa_args=%s' % (task, obs, args_string, drmaa_args_string))
 
         elif action_type == "KILL_TASK":
             conn_type = "GET"
@@ -232,9 +233,9 @@ class TaskClient:
             logger.debug("Connection status : %s : %s" % (response_status, response_reason))
         return status, self.error_count
 
-    def gen_drmma_args(self, task, obs):
-        args = []
-        args = self.wf.action_args[task]
+    def gen_drmaa_args(self, task, obs):
+
+        args = self.wf.drmaa_args[task]
         return args
 
     def gen_args(self, task, obs):
@@ -324,8 +325,8 @@ class TaskHandler(BaseHTTPRequestHandler):
             obsnum = str(form.getfirst("obsnum", ""))
             still = form.getfirst("still", "")
             args = form.getfirst("args", "").split(' ')
-            drmma_args = form.getfirst("drmma_args", "").split(' ')
-            drmma_queue = form.getfirst("drmma_queue", "")
+            drmaa_args = form.getfirst("drmaa_args", "")  # .split(' ')
+            drmaa_queue = form.getfirst("drmaa_queue", "")
             pickled_env_vars = form.getfirst("env_vars", "")  # Will be coming in pickled, might want to do the same for args
             env_vars = pickle.loads(pickled_env_vars)  # depickled env_vars, should now be a dict
 
@@ -342,7 +343,8 @@ class TaskHandler(BaseHTTPRequestHandler):
                     break
 
             if task_already_exists is False:
-                t = Task(task, obsnum, still, args, drmma_args, drmma_queue, self.server.dbi, self.server, self.server.data_dir, self.server.path_to_do_scripts, custom_env_vars=env_vars)
+                t = Task(task, obsnum, still, args, drmaa_args, drmaa_queue, self.server.dbi, self.server, self.server.data_dir, self.server.path_to_do_scripts, custom_env_vars=env_vars)
+                print("Appending task")
                 self.server.append_task(t)
                 t.run()
         return
@@ -366,13 +368,10 @@ class TaskServer(HTTPServer):
         self.port = port
         self.path_to_do_scripts = path_to_do_scripts
         self.logger = sg.logger
-        self.drmma_session = ''
+        self.drmaa_session = ''
+        self.shutting_down = False
 
         # signal.signal(signal.SIGINT, self.signal_handler)  # Enabled clean shutdown after Cntrl-C event.
-
-        logger.debug("Path to do_ Scripts : %s" % self.path_to_do_scripts)
-        logger.debug("Data_dir : %s" % self.data_dir)
-        logger.debug("Port : %s" % self.port)
 
     def append_task(self, t):
         self.active_tasks_semaphore.acquire()  # Jon : Not sure why we're doing this, we only have one primary thread
@@ -381,7 +380,7 @@ class TaskServer(HTTPServer):
 
     def poll_task_status(self, task):
         if self.sg.cluster_scheduler == 1:  # Do we need to interface with a cluster scheduler?
-            task_info = self.drmma_session.wait(task.jid, drmaa.Session.TIMEOUT_NO_WAIT)
+            task_info = self.drmaa_session.wait(task.jid, drmaa.Session.TIMEOUT_NO_WAIT)
             if task_info.hasExited is True:
                 poll_status = True
             else:
@@ -390,8 +389,10 @@ class TaskServer(HTTPServer):
         else:
             try:
                 poll_status = task.process.poll()  # race condition due to threading, might fix later
+                print("Poll status: %s") % poll_status
             except:
                 poll_status = None
+                print("Poll status2: %s") % poll_status
                 time.sleep(2)
 
         return poll_status
@@ -404,8 +405,9 @@ class TaskServer(HTTPServer):
             self.active_tasks_semaphore.acquire()
             new_active_tasks = []
             for mytask in self.active_tasks:
-
+                print("Got here...1")
                 if self.poll_task_status(mytask) is None:
+                    print("Got here..2")
                     new_active_tasks.append(mytask)   # I don't see the point in this.. should probably rewrite
                 else:
                     mytask.finalize()
@@ -467,12 +469,17 @@ class TaskServer(HTTPServer):
         t = threading.Thread(target=self.finalize_tasks)
         t.daemon = True
         t.start()
-        logger.debug('Starting Task Server')
-        logger.debug("using code at: " + __file__)
-        if self.sg.cluster_schedule == 1:
+        logger.info('Starting Task Server')
+        logger.info("using code at: " + __file__)
+        logger.info("Path to do_ Scripts : %s" % self.path_to_do_scripts)
+        logger.info("Data_dir : %s" % self.data_dir)
+        logger.info("Port : %s" % self.port)
+
+        if self.sg.cluster_scheduler == 1:
+            logger.info("Initilizing DRMAA interface to cluster scheduler")
             import drmaa
-            self.drmma_session = drmaa.Session()  # Start the interface session to DRMAA to control GridEngine
-            self.drmma_session.initialize()
+            self.drmaa_session = drmaa.Session()  # Start the interface session to DRMAA to control GridEngine
+            self.drmaa_session.initialize()
         try:
             # Setup a thread that just updates the last checkin time for this still every 5min
             timer_thread = threading.Thread(target=self.checkin_timer)
@@ -484,21 +491,25 @@ class TaskServer(HTTPServer):
         return
 
     def shutdown(self):
-        logger.debug("Shutting down task_server")
-        hostname = socket.gethostname()
-        ip_addr = socket.gethostbyname(hostname)
-        cpu_usage = psutil.cpu_percent()
-        self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), self.data_dir, status="OFFLINE")
-        self.keep_running = False
-        parentproc = psutil.Process()
-        myprocs = parentproc.children(recursive=True)
-        for proc in myprocs:
-            logger.debug("Killing nicely -> Pid: %s - Proc: %s" % (proc.pid, proc.name))
-            proc.terminate()
-        gone, alive = psutil.wait_procs(myprocs, timeout=3)
-        for proc in alive:
-            logger.debug("Killing with gusto -> Pid: %s - Proc: %s" % (proc.pid, proc.name))
-            proc.kill()
-        HTTPServer.shutdown(self)
-        self.drmma_session.exit()
-        sys.exit(0)
+        if self.shutting_down is False:  # check to see if we're already shutting down so we don't step over multiple threads attempting this.
+            self.shutting_down = True
+            logger.debug("Shutting down task_server")
+            hostname = socket.gethostname()
+            ip_addr = socket.gethostbyname(hostname)
+            cpu_usage = psutil.cpu_percent()
+            self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), self.data_dir, status="OFFLINE")
+            self.keep_running = False
+            parentproc = psutil.Process()
+            myprocs = parentproc.children(recursive=True)
+            for proc in myprocs:
+                logger.debug("Killing nicely -> Pid: %s - Proc: %s" % (proc.pid, proc.name))
+                proc.terminate()
+            gone, alive = psutil.wait_procs(myprocs, timeout=3)
+            for proc in alive:
+                logger.debug("Killing with gusto -> Pid: %s - Proc: %s" % (proc.pid, proc.name))
+                proc.kill()
+            HTTPServer.shutdown(self)
+            if self.sg.cluster_scheduler == 1:
+                self.drmaa_session.exit()  # Terminate DRMAA sessionmaker
+
+            sys.exit(0)

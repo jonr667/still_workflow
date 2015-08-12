@@ -1,3 +1,4 @@
+
 import time
 import sys
 import threading
@@ -286,8 +287,8 @@ class Scheduler(ThreadingMixIn, HTTPServer):
 
             self.ext_command_hook()
             self.get_new_active_obs()
-            self.update_action_queue(ActionClass, action_args)
 
+            self.update_action_queue(ActionClass, action_args)
             launched_actions_copy = copy.copy(self.launched_actions)
             # Launch actions that can be scheduled
             for tm in launched_actions_copy:
@@ -297,6 +298,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
 
                 while len(self.get_launched_actions(tm, tx=False)) < tm_info.max_num_of_tasks:  # I think this will work
                     action_from_queue = self.pop_action_queue(tm, tx=False)  # FIXME: MIght still be having a small issue when a TM goes offline and back on
+
                     if action_from_queue is not False:
                         if self.launch_action(action_from_queue)[0] != "OK":  # If we had a connection error stop trying until TM checks back in
                             break
@@ -341,7 +343,6 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         '''Return highest priority action for the given still.'''
         # Seems like we're going through all the actions to find the ones for the particular still..
         # Should think about optimizing at some point
-
         for i in xrange(len(self.action_queue)):
             a = self.action_queue[i]
             if a.still == still and a.is_transfer == tx:
@@ -494,9 +495,14 @@ class Scheduler(ThreadingMixIn, HTTPServer):
 
         if not still:
             if self.initial_startup is True:
+
                 still = self.tm_cycle.next().hostname  # Balance out all the nodes on startup
             else:
+
                 still = self.obs_to_still(obsnum)  # Get a still for a new obsid if one doesn't already exist.
+                if still is False:
+                    return None
+
             self.dbi.set_obs_still_host(obsnum, still)  # Assign the still to the obsid
 
             if self.lock_all_neighbors_to_same_still == 1 and self.wf.neighbors == 1:
@@ -543,9 +549,12 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                 return 0
         else:
             still = self.dbi.get_most_available_still()
+            if still is not False:
+                return still
+            else:
+                return False
 
-            while not still:
-                logger.info("Can't find any available still servers, they are all above 80% usage or have gone offline.  Waiting...")
-                time.sleep(10)
-                still = self.dbi.get_most_available_still()
-            return still
+#            while not still:
+#                logger.info("Can't find any available Task Managers, they are all above 80% usage or have gone offline.  Waiting...")
+#                time.sleep(10)
+#                still = self.dbi.get_most_available_still()
