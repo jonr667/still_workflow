@@ -221,7 +221,6 @@ def process_client_config_file(sg, wf):
             wf.action_args[action] = '[\'%s:%s/%s\' % (pot, path, basename)]'  # Put in a default host:path/filename for each actions arguements that get passed to do_ scripts
 
             if action in config_sections:
-
                 wf.action_prereqs[action] = get_config_entry(config, action, 'prereqs', reqd=False, remove_spaces=True).split(",")
                 wf.action_args[action] = get_config_entry(config, action, 'args', reqd=False, remove_spaces=False)
                 wf.drmaa_args[action] = get_config_entry(config, action, 'drmaa_args', reqd=False, remove_spaces=False)

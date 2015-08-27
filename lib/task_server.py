@@ -117,7 +117,7 @@ class Task:
 
     def finalize(self):
         if self.sg.cluster_scheduler == 1:
-            task_output = 1
+            task_output = "yes"
             task_return_code = 1
         else:
             task_output = self.process.communicate()[0]
@@ -144,7 +144,10 @@ class Task:
         os.wait()  # Might need to think about this one, communicate might be a better option but not sure
 
     def record_launch(self):
-        self.dbi.set_obs_pid(self.obs, self.process.pid)
+        if self.sg.cluster_scheduler == 1:
+            self.dbi.set_obs_pid(self.obs, self.process)
+        else:
+            self.dbi.set_obs_pid(self.obs, self.process.pid)
 
     def record_failure(self, failure_type="FAILED"):
         for task in self.ts.active_tasks:
@@ -380,15 +383,18 @@ class TaskServer(HTTPServer):
 
     def poll_task_status(self, task):
         if self.sg.cluster_scheduler == 1:  # Do we need to interface with a cluster scheduler?
-            task_info = self.drmaa_session.wait(task.jid, drmaa.Session.TIMEOUT_NO_WAIT)
-            if task_info.hasExited is True:
+            import drmaa
+#            task_info = self.drmaa_session.wait(task.jid, drmaa.Session.TIMEOUT_NO_WAIT)
+            task_info = self.drmaa_session.jobStatus(task.jid)
+            print("Task Info", task_info)
+            if task_info == "done":  # Check for failed as well
                 poll_status = True
             else:
                 poll_status = None
             # attributes: retval. :  jobId, hasExited, hasSignal, terminatedSignal, hasCoreDump, wasAborted, exitStatus, and resourceUsage
         else:
             try:
-                poll_status = task.process.poll()  # race condition due to threading, might fix later
+                poll_status = task.process.poll()  # race condition due to threading, might fix later, pretty rare
                 print("Poll status: %s") % poll_status
             except:
                 poll_status = None
@@ -408,7 +414,7 @@ class TaskServer(HTTPServer):
                 print("Got here...1")
                 if self.poll_task_status(mytask) is None:
                     print("Got here..2")
-                    new_active_tasks.append(mytask)   # I don't see the point in this.. should probably rewrite
+                    new_active_tasks.append(mytask)   # This should probably be handled in a better way
                 else:
                     mytask.finalize()
             self.active_tasks = new_active_tasks
