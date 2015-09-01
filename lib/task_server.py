@@ -73,7 +73,7 @@ class Task:
         jt.remoteCommand = "%s/do_%s.sh" % (self.path_to_do_scripts, self.task)
         self.drmaa_stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.data_dir, self.obs, self.task)
 
-        jt.nativeSpecification = "-q %s -o %s %s" % (self.drmaa_queue, self.drmaa_stdout_stderr_file, self.drmaa_args)  # Don't forget -e as well..
+        jt.nativeSpecification = "-q %s -j y -o %s %s" % (self.drmaa_queue, self.drmaa_stdout_stderr_file, self.drmaa_args)  # Don't forget -e as well..
         jt.args = self.args
         jt.joinFiles = True
         print("RemoteCMD: %s   NativeSpec: %s   Args: %s") % (jt.remoteCommand, jt.nativeSpecification, jt.args)
@@ -117,13 +117,17 @@ class Task:
 
     def finalize(self):
         if self.sg.cluster_scheduler == 1:
-            task_output = "yes"
-            task_return_code = 1
+            task_info = self.ts.drmaa_session.wait(self.jid, self.ts.drmaa_session.TIMEOUT_WAIT_FOREVER)  # get JobInfo instance
+            with open(self.drmaa_stdout_stderr_file, 'r') as output_file:  # Read in stdout/stderr combined file
+                task_output = output_file.read()
+
+            task_return_code = task_info.exitStatus
         else:
             task_output = self.process.communicate()[0]
             task_return_code = self.process.returncode
 
         self.dbi.update_log(self.obs, status=self.task, logtext=task_output, exit_status=task_return_code)
+
         if task_return_code != 0:  # If the task didn't return with an exit code of 0 mark as failure
             logger.error("Task.finalize : Task Failed : Obsnum: %s , Task: %s, Exit Code: %s, OUTPUT : %s" % (self.task, self.obs, task_return_code, task_output))
             self.record_failure()
@@ -134,14 +138,20 @@ class Task:
 
     def kill(self):
         self.record_failure(failure_type="KILLED")
-        if self.process.pid:
-            logger.debug('Task.kill Trying to kill: ({task},{obsnum}) pid={pid}'.format(task=self.task, obsnum=self.obs, pid=self.process.pid))
 
-            for child in self.process.children(recursive=True):
-                child.kill()
-            self.process.kill()
+        if self.sg.cluster_scheduler == 1:
+            import drmaa
+            self.ts.drmaa_session.control(self.jid, drmaa.JobControlAction.TERMINATE)
+            logger.debug('Task.kill Trying to kill: ({task},{obsnum}) pid={pid}'.format(task=self.task, obsnum=self.obs, pid=self.jid))
+        else:
+            if self.process.pid:
+                logger.debug('Task.kill Trying to kill: ({task},{obsnum}) pid={pid}'.format(task=self.task, obsnum=self.obs, pid=self.process.pid))
 
-        os.wait()  # Might need to think about this one, communicate might be a better option but not sure
+                for child in self.process.children(recursive=True):
+                    child.kill()
+                self.process.kill()
+
+            os.wait()  # Might need to think about this one, communicate might be a better option but not sure
 
     def record_launch(self):
         if self.sg.cluster_scheduler == 1:
@@ -289,7 +299,7 @@ class TaskHandler(BaseHTTPRequestHandler):
         if upper(parsed_path.path) == "/KILL_TASK":
             try:
                 obsnum = str(parsed_path.query)
-                pid_of_obs_to_kill = self.server.dbi.get_obs_pid(obsnum)
+                pid_of_obs_to_kill = int(self.server.dbi.get_obs_pid(obsnum))
                 logger.debug("We recieved a kill request for obsnum: %s, shutting down pid: %s" % (obsnum, pid_of_obs_to_kill))
                 self.server.kill(pid_of_obs_to_kill)
                 self.send_response(200)  # Return a response of 200, OK to the client
@@ -383,11 +393,11 @@ class TaskServer(HTTPServer):
 
     def poll_task_status(self, task):
         if self.sg.cluster_scheduler == 1:  # Do we need to interface with a cluster scheduler?
-            import drmaa
+
 #            task_info = self.drmaa_session.wait(task.jid, drmaa.Session.TIMEOUT_NO_WAIT)
             task_info = self.drmaa_session.jobStatus(task.jid)
             print("Task Info", task_info)
-            if task_info == "done":  # Check for failed as well
+            if task_info == "done" or task_info == "failed":  # Check if task is done or failed..
                 poll_status = True
             else:
                 poll_status = None
@@ -445,10 +455,20 @@ class TaskServer(HTTPServer):
     def kill(self, pid):
         try:
             for task in self.active_tasks:
-                if task.process.pid == pid:
-                    task.kill()
-                    break
+                if self.sg.cluster_scheduler == 1:  # Do we need to interface with a cluster scheduler?
+                    print("Looking for pid :%s:, got task.jid :%s:") % (pid, task.jid)
+                    if int(task.jid) == int(pid):
+                        print("Going to kill it now!!!")
+                        task.kill()
+                        break
+                    else:
+                        print("Why do Task.jid: %i and pid: %i not match!?!") % (task.jid, pid)
+                else:
+                    if int(task.process.pid) == int(pid):
+                        task.kill()
+                        break
         except:
+            print("WTF?!?!")
             logger.exception("Problem killing off task: %s  w/  pid : %s" % (task, pid))
 
     def kill_all(self):

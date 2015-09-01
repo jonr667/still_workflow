@@ -2,5 +2,5 @@
 
 echo "$@"
 export
-sleep 30
+sleep 10
 exit 0
