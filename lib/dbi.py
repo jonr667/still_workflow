@@ -610,9 +610,9 @@ class DataBaseInterface(object):
             still = s.query(Still).filter(Still.hostname == hostname).one()
             still.last_checkin = datetime.datetime.now()
             still.status = status
-            print("STILL_CHECKIN, test mode, setting load = 0, change back before release")
-            still.current_load = 0
-            # still.current_load = psutil.cpu_percent()
+            # print("STILL_CHECKIN, test mode, setting load = 0, change back before release")
+            # still.current_load = 0
+            still.current_load = psutil.cpu_percent()
             still.number_of_cores = psutil.cpu_count()
             still.free_memory = round(psutil.virtual_memory().free / (1024 ** 3), 2)
             still.total_memory = round(psutil.virtual_memory().total / (1024 ** 3), 2)

@@ -454,7 +454,6 @@ class TaskServer(HTTPServer):
                     if int(task.jid) == int(pid):
                         task.kill()
                         break
-                    else:
                 else:
                     if int(task.process.pid) == int(pid):
                         task.kill()
