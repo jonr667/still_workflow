@@ -76,7 +76,6 @@ class Task:
         jt.nativeSpecification = "-q %s -j y -o %s %s" % (self.drmaa_queue, self.drmaa_stdout_stderr_file, self.drmaa_args)  # Don't forget -e as well..
         jt.args = self.args
         jt.joinFiles = True
-        print("RemoteCMD: %s   NativeSpec: %s   Args: %s") % (jt.remoteCommand, jt.nativeSpecification, jt.args)
         jid = self.ts.drmaa_session.runJob(jt)  # Get the Job ID
         return jid
 
@@ -357,7 +356,6 @@ class TaskHandler(BaseHTTPRequestHandler):
 
             if task_already_exists is False:
                 t = Task(task, obsnum, still, args, drmaa_args, drmaa_queue, self.server.dbi, self.server, self.server.data_dir, self.server.path_to_do_scripts, custom_env_vars=env_vars)
-                print("Appending task")
                 self.server.append_task(t)
                 t.run()
         return
@@ -396,7 +394,7 @@ class TaskServer(HTTPServer):
 
 #            task_info = self.drmaa_session.wait(task.jid, drmaa.Session.TIMEOUT_NO_WAIT)
             task_info = self.drmaa_session.jobStatus(task.jid)
-            print("Task Info", task_info)
+
             if task_info == "done" or task_info == "failed":  # Check if task is done or failed..
                 poll_status = True
             else:
@@ -405,10 +403,8 @@ class TaskServer(HTTPServer):
         else:
             try:
                 poll_status = task.process.poll()  # race condition due to threading, might fix later, pretty rare
-                print("Poll status: %s") % poll_status
             except:
                 poll_status = None
-                print("Poll status2: %s") % poll_status
                 time.sleep(2)
 
         return poll_status
@@ -421,9 +417,7 @@ class TaskServer(HTTPServer):
             self.active_tasks_semaphore.acquire()
             new_active_tasks = []
             for mytask in self.active_tasks:
-                print("Got here...1")
                 if self.poll_task_status(mytask) is None:
-                    print("Got here..2")
                     new_active_tasks.append(mytask)   # This should probably be handled in a better way
                 else:
                     mytask.finalize()
@@ -456,19 +450,16 @@ class TaskServer(HTTPServer):
         try:
             for task in self.active_tasks:
                 if self.sg.cluster_scheduler == 1:  # Do we need to interface with a cluster scheduler?
-                    print("Looking for pid :%s:, got task.jid :%s:") % (pid, task.jid)
+
                     if int(task.jid) == int(pid):
-                        print("Going to kill it now!!!")
                         task.kill()
                         break
                     else:
-                        print("Why do Task.jid: %i and pid: %i not match!?!") % (task.jid, pid)
                 else:
                     if int(task.process.pid) == int(pid):
                         task.kill()
                         break
         except:
-            print("WTF?!?!")
             logger.exception("Problem killing off task: %s  w/  pid : %s" % (task, pid))
 
     def kill_all(self):

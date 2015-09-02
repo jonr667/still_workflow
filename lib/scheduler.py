@@ -75,17 +75,15 @@ class Action:
         for status_of_neighbor in self.neighbor_status:
             if status_of_neighbor is None:  # indicates that obs hasn't been entered into DB yet
                 return False
-            # logger.debug("Neighbor Status: %s" % status_of_neighbor)
+
             index_of_neighbor_status = self.wf.workflow_actions.index(status_of_neighbor)
-            # logger.debug("Index1: %s, Index of neighbor status : %s" % (index1, index_of_neighbor_status))
+
             if index1 is not None and index_of_neighbor_status < index1:
                 return False
-#            if index2 is not None:
-#                logger.debug("Index1: %s, Index of neighbor status : %s" % (index2, index_of_neighbor_status))
+
             if index2 is not None and index_of_neighbor_status >= index2:
                 return False
-            # logger.debug('Action.has_prerequisites: (%s,%s) prerequisites met' % (self.task, self.obs))
-        # logger.debug("PreREqs: Going to return true...")
+
         return True
 
     def launch(self, launch_time=None):
@@ -107,7 +105,8 @@ class Action:
             task = self.task
 
         logger.debug('Action: task_client(%s,%s)' % (task, self.obs))
-        connection_status = self.task_client.transmit(task, self.obs, action_type)
+        connection_status, error_count = self.task_client.transmit(task, self.obs, action_type)
+
         return connection_status
 
 
@@ -300,16 +299,15 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                     action_from_queue = self.pop_action_queue(tm, tx=False)  # FIXME: MIght still be having a small issue when a TM goes offline and back on
 
                     if action_from_queue is not False:
-                        if self.launch_action(action_from_queue)[0] != "OK":  # If we had a connection error stop trying until TM checks back in
+                        if self.launch_action(action_from_queue) != "OK":  # If we had a connection error stop trying until TM checks back in
                             break
                     else:
-                        # print("No actions available for TaskManager : %s") % tm
                         break
 
             self.clean_completed_actions(self.dbi)
 
             keyboard_input = self.user_input.get_user_input()
-            if keyboard_input is not None:
+            if keyboard_input is not None and keyboard_input != '':
                 handle_keyboard_input(self, keyboard_input)
             else:
                 time.sleep(self.sleep_time)
@@ -365,17 +363,16 @@ class Scheduler(ThreadingMixIn, HTTPServer):
 
     def clean_completed_actions(self, dbi):
         '''Check launched actions for completion, timeout or fail'''
+
         for still in self.launched_actions:
             updated_actions = []
             for action in self.launched_actions[still]:
-                # status = dbi.get_obs_status(action.obs)
                 obs = dbi.get_obs(action.obs)
                 status = obs.status
                 pid = dbi.get_obs_pid(action.obs)
 
                 try:
                     self.failcount[str(action.obs) + status]
-
                 except(KeyError):
                     self.failcount[str(action.obs) + status] = 0
 
@@ -472,7 +469,6 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             if any(still for still in self.stills if still.hostname == obsinfo.stillhost):
                 pass
             else:
-                print("Rejected")
                 return None
         if self.wf.neighbors == 1:  # FIX ME, I don't want to call the same thing twice.. its ugly
             neighbors = self.dbi.get_neighbors(obsnum)
