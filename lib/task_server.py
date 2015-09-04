@@ -47,6 +47,13 @@ class Task:
         self.drmaa_args = drmaa_args
         self.drmaa_queue = drmaa_queue
 
+    def remove_file_if_exists(self, filename):
+        try:
+            os.remove(filename)
+        except OSError:
+            pass
+        return
+
     def run(self):
         if self.process is not None:
             raise RuntimeError('Cannot run a Task that has been run already.')
@@ -58,8 +65,11 @@ class Task:
         return
 
     def run_popen(self):
+        self.stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.data_dir, self.obs, self.task)
+        self.remove_file_if_exists(self.stdout_stderr_file)
+        stdout_stderr_buf = open(self.stdout_stderr_file, "w")
         process = psutil.Popen(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args,
-                               cwd=self.cwd, env=self.full_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                               cwd=self.cwd, env=self.full_env, stdout=stdout_stderr_buf, stderr=subprocess.STDOUT)
         try:
             process.nice(2)  # Jon : I want to set all the processes evenly so they don't compete against core OS functionality (ssh, cron etc..) slowing things down.
             if PLATFORM != "Darwin":  # Jon : cpu_affinity doesn't exist for the mac, testing on a mac... yup... good story.
@@ -71,9 +81,10 @@ class Task:
     def run_drmaa(self):
         jt = self.ts.drmaa_session.createJobTemplate()
         jt.remoteCommand = "%s/do_%s.sh" % (self.path_to_do_scripts, self.task)
-        self.drmaa_stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.data_dir, self.obs, self.task)
+        self.stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.data_dir, self.obs, self.task)
+        self.remove_file_if_exists(self.stdout_stderr_file)
 
-        jt.nativeSpecification = "-q %s -j y -o %s %s" % (self.drmaa_queue, self.drmaa_stdout_stderr_file, self.drmaa_args)  # Don't forget -e as well..
+        jt.nativeSpecification = "-q %s -j y -o %s %s" % (self.drmaa_queue, self.stdout_stderr_file, self.drmaa_args)  # Don't forget -e as well..
         jt.args = self.args
         jt.joinFiles = True
         jid = self.ts.drmaa_session.runJob(jt)  # Get the Job ID
@@ -115,14 +126,14 @@ class Task:
         return process
 
     def finalize(self):
+        with open(self.stdout_stderr_file, 'r') as output_file:  # Read in stdout/stderr combined file
+            task_output = output_file.read()
+
         if self.sg.cluster_scheduler == 1:
             task_info = self.ts.drmaa_session.wait(self.jid, self.ts.drmaa_session.TIMEOUT_WAIT_FOREVER)  # get JobInfo instance
-            with open(self.drmaa_stdout_stderr_file, 'r') as output_file:  # Read in stdout/stderr combined file
-                task_output = output_file.read()
-
             task_return_code = task_info.exitStatus
         else:
-            task_output = self.process.communicate()[0]
+            # task_output = self.process.communicate()[0]
             task_return_code = self.process.returncode
 
         self.dbi.update_log(self.obs, status=self.task, logtext=task_output, exit_status=task_return_code)
@@ -170,6 +181,7 @@ class Task:
     def record_completion(self):
         self.dbi.set_obs_status(self.obs, self.task)
         self.dbi.set_obs_pid(self.obs, 0)
+        self.remove_file_if_exists(self.stdout_stderr_file)
 
 
 class TaskClient:
@@ -392,7 +404,6 @@ class TaskServer(HTTPServer):
     def poll_task_status(self, task):
         if self.sg.cluster_scheduler == 1:  # Do we need to interface with a cluster scheduler?
 
-#            task_info = self.drmaa_session.wait(task.jid, drmaa.Session.TIMEOUT_NO_WAIT)
             task_info = self.drmaa_session.jobStatus(task.jid)
 
             if task_info == "done" or task_info == "failed":  # Check if task is done or failed..
