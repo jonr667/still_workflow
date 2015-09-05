@@ -116,10 +116,8 @@ class Task:
                 self.ts.shutdown()
 
         try:
-
             self.dbi.update_obs_current_stage(self.obs, self.task)
             self.dbi.add_log(self.obs, self.task, ' '.join(['%sdo_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args + ['\n']), None)
-
         except:
             logger.exception("Could not update database")
 
@@ -213,12 +211,15 @@ class TaskClient:
             conn_path = "/NEW_TASK"
             args = self.gen_args(task, obs)
             args_string = ' '.join(args)
-            drmaa_args_string = self.gen_drmaa_args(task, obs)
-            if self.wf.drmaa_queue_by_task[task]:
-                drmaa_queue = self.wf.drmaa_queue_by_task[task]
+            if self.sg.cluster_scheduler == 1:
+                drmaa_args_string = self.gen_drmaa_args(task, obs)
+                if self.wf.drmaa_queue_by_task[task]:
+                    drmaa_queue = self.wf.drmaa_queue_by_task[task]
+                else:
+                    drmaa_queue = self.wf.default_drmaa_queue
             else:
-                drmaa_queue = self.wf.default_drmaa_queue
-
+                drmaa_queue = ""
+                drmaa_args_string = ""
             pickled_env_vars = pickle.dumps(self.sg.env_vars)
             conn_params = urllib.urlencode({'obsnum': obs,
                                             'task': task,
