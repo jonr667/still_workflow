@@ -8,13 +8,13 @@ if [ ! $1 ]; then
    exit 1
 fi
       
-mkdir -p /scratch/wedge/$1
+mkdir -p $1
 
 if [ ! -d $obs ]; then
    echo "Obs working dir : $pwd/$obs does not exist!"
    exit 1
 fi
-cd /scratch/wedge/$1
+cd $1
 
 aws s3 cp s3://mwatest/uvfits/4.1/$1.uvfits ./
 
