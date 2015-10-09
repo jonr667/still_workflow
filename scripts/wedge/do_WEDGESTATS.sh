@@ -1,10 +1,11 @@
 #!/bin/bash
 
+obs=$1
+pwd=$(pwd)
+
 cd /usr/local/mwa/anaconda/bin
 source activate /usr/local/mwa/anaconda/
 
-obs=$1
-pwd=$(pwd)
 PGPASSWORD=$pg_qc_passwd
 export PGPASSWORD
 
