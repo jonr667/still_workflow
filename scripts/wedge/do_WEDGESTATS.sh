@@ -5,6 +5,7 @@ pwd=$(pwd)
 
 cd /usr/local/mwa/anaconda/bin
 source activate /usr/local/mwa/anaconda/
+cd $pwd
 
 PGPASSWORD=$pg_qc_passwd
 export PGPASSWORD
