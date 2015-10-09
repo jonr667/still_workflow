@@ -37,7 +37,7 @@ if [ $return_code = 0 ]; then
    ptsrc_wedge_x=`python -c "print '${WEDGESTATS}'.split()[9]"`
    ptsrc_wedge_y=`python -c "print '${WEDGESTATS}'.split()[10]"`
 
-   previous_window=`psql -h $pg_qc_host $pg_qc_db -U $pg_qc_username -c "select count(*) from qs where obsid=${obsid}" -t -A`
+   previous_window=`psql -h $pg_qc_host $pg_qc_db -U $pg_qc_username -c "select count(*) from qs where obsid=${obs}" -t -A`
    if [ $previous_window -eq 0 ]; then
       #this is the first time, do an insert
       echo "Creating new wedge record for $obs"
