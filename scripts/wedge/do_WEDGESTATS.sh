@@ -1,5 +1,8 @@
 #!/bin/bash
 
+cd /usr/local/mwa/anaconda/bin
+source activate /usr/local/mwa/anaconda/
+
 obs=$1
 pwd=$(pwd)
 PGPASSWORD=$pg_qc_passwd
@@ -16,7 +19,7 @@ if [ ! -d $obs ]; then
 fi
 cd $1
 
-WEDGESTATS=`python ~/scripts/wedgestats.py $obs.p.npz`
+WEDGESTATS=`python /home/ec2-user/mwa_wedge/wedgestats.py $obs.p.npz`
 
 echo found $WEDGESTATS
 
