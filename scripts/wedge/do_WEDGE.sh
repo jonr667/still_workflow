@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 obs=$1
@@ -18,4 +19,12 @@ if [ ! -d $pwd/$obs ]; then
 fi
 
 cd $obs
+python /home/ec2-user/mwa_wedge/wedge.py --baselines_file /home/ec2-user/mwa_wedge/MWA_128T_antenna_locations.txt -o ./$1.uvfits
 
+return_code=$?
+
+if [ $return_code -ne 0 ]; then
+   echo "Wedge had a problem!"
+   exit 1
+fi
+      
