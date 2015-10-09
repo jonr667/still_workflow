@@ -15,7 +15,7 @@ if [ ! -d $obs ]; then
 fi
 cd $1
 
-aws s3 cp ./*.npz s3://mwatest/npz/4.1/ 
+aws s3 cp ./ s3://mwatest/npz/4.1/ --recursive --exclude "*.uvfits"
 
 return_code=$?
    
