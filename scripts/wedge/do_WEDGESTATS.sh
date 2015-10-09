@@ -2,6 +2,8 @@
 
 obs=$1
 pwd=$(pwd)
+PGPASSWORD=$pg_qc_passwd
+export PGPASSWORD
 
 if [ ! $1 ]; then
    echo "No observation ID given."
@@ -30,15 +32,15 @@ if [ $return_code = 0 ]; then
    ptsrc_wedge_x=`python -c "print '${WEDGESTATS}'.split()[9]"`
    ptsrc_wedge_y=`python -c "print '${WEDGESTATS}'.split()[10]"`
 
-   previous_window=`psql -h eor-00 mwa_qc -U mwa -c "select count(*) from qs where obsid=${obsid}" -t -A`
+   previous_window=`psql -h $pg_qc_host $pg_qc_db -U $pg_qc_username -c "select count(*) from qs where obsid=${obsid}" -t -A`
    if [ $previous_window -eq 0 ]; then
       #this is the first time, do an insert
-      echo "Creating new wedge record for $obsid"
-      psql -h eor-00 mwa_qc -U mwa -c "insert into qs (obsid,window_x,window_y,wedge_res_x,wedge_res_y,gal_wedge_x,gal_wedge_y,ptsrc_wedge_x,ptsrc_wedge_y,wedge_timestamp) values (${obsid},${window_x},${window_y},${wedge_res_x},${wedge_res_y},${gal_wedge_x},${gal_wedge_y},${ptsrc_wedge_x},${ptsrc_wedge_y},current_timestamp)"
+      echo "Creating new wedge record for $obs"
+      psql -h $pg_qc_host $pg_qc_db -U $pg_qc_username -c "insert into qs (obsid,window_x,window_y,wedge_res_x,wedge_res_y,gal_wedge_x,gal_wedge_y,ptsrc_wedge_x,ptsrc_wedge_y,wedge_timestamp) values (${obs},${window_x},${window_y},${wedge_res_x},${wedge_res_y},${gal_wedge_x},${gal_wedge_y},${ptsrc_wedge_x},${ptsrc_wedge_y},current_timestamp)"
    else
       #this is a redo, do an update
-      echo "updating old wedge record for $obsid"
-      psql -h eor-00 mwa_qc -U mwa -c "update qs set (window_x,window_y,wedge_res_x,wedge_res_y,gal_wedge_x,gal_wedge_y,ptsrc_wedge_x,ptsrc_wedge_y,wedge_timestamp) = (${window_x},${window_y},${wedge_res_x},${wedge_res_y},${gal_wedge_x},${gal_wedge_y},${ptsrc_wedge_x},${ptsrc_wedge_y},current_timestamp) where obsid=${obsid}"
+      echo "updating old wedge record for $obs"
+      psql -h $pg_qc_host $pg_qc_db -U $pg_qc_username -c "update qs set (window_x,window_y,wedge_res_x,wedge_res_y,gal_wedge_x,gal_wedge_y,ptsrc_wedge_x,ptsrc_wedge_y,wedge_timestamp) = (${window_x},${window_y},${wedge_res_x},${wedge_res_y},${gal_wedge_x},${gal_wedge_y},${ptsrc_wedge_x},${ptsrc_wedge_y},current_timestamp) where obsid=${obs}"
    fi    
 fi
 
