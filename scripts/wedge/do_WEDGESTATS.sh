@@ -42,13 +42,8 @@ if [ $return_code = 0 ]; then
    fi    
 fi
 
-if [ $return_code -ne 0 ]; then
-   echo "Could not scp file $1.uvfits from THE CLOUD"
-   exit 1
-fi
-return_code=$?
 
 if [ $return_code -ne 0 ]; then
-   echo "Could not scp file $1.uvfits from THE CLOUD"
+   echo "Could not perform wedgestats.py"
    exit 1
 fi
