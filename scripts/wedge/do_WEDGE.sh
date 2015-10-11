@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 obs=$1
