@@ -24,4 +24,3 @@ if [ $return_code -ne 0 ]; then
    echo "Could not scp file $1.uvfits from THE CLOUD"
    exit 1
 fi
-                     

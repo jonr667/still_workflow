@@ -81,10 +81,11 @@ class Task:
     def run_drmaa(self):
         jt = self.ts.drmaa_session.createJobTemplate()
         jt.remoteCommand = "%s/do_%s.sh" % (self.path_to_do_scripts, self.task)
-        self.stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.data_dir, self.obs, self.task)
+        # self.stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.data_dir, self.obs, self.task)
+        self.stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.drmaa_shared, self.obs, self.task)
         self.remove_file_if_exists(self.stdout_stderr_file)
 
-        jt.nativeSpecification = "-q %s -j y -o %s %s" % (self.drmaa_queue, self.stdout_stderr_file, self.drmaa_args)  # Don't forget -e as well..
+        jt.nativeSpecification = "-q %s -wd %s -j y -o %s %s" % (self.drmaa_queue, self.cwd, self.stdout_stderr_file, self.drmaa_args)  # Don't forget -e as well..
         jt.args = self.args
         jt.joinFiles = True
         jid = self.ts.drmaa_session.runJob(jt)  # Get the Job ID
@@ -377,7 +378,7 @@ class TaskHandler(BaseHTTPRequestHandler):
 class TaskServer(HTTPServer):
     allow_reuse_address = True
 
-    def __init__(self, dbi, sg, data_dir='.', port=14204, handler=TaskHandler, path_to_do_scripts="."):
+    def __init__(self, dbi, sg, data_dir='.', port=14204, handler=TaskHandler, path_to_do_scripts=".", drmaa_shared='/shared'):
         global logger
         logger = sg.logger
         self.myhostname = socket.gethostname()
@@ -393,6 +394,7 @@ class TaskServer(HTTPServer):
         self.path_to_do_scripts = path_to_do_scripts
         self.logger = sg.logger
         self.drmaa_session = ''
+        self.drmaa_shared = drmaa_shared
         self.shutting_down = False
 
         # signal.signal(signal.SIGINT, self.signal_handler)  # Enabled clean shutdown after Cntrl-C event.

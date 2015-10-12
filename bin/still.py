@@ -71,6 +71,7 @@ class SpawnerClass:
         self.env_vars = ''
         self.ip_addr = ''
         self.cluster_scheduler = 0
+        self.drmaa_shared = '/shared'
 
     def preflight_check_scheduler(self):
         # Nothing to do here at the moment, just a place holder
@@ -203,6 +204,7 @@ def process_client_config_file(sg, wf):
         sg.actions_per_still = int(get_config_entry(config, 'Still', 'actions_per_still', reqd=False, remove_spaces=True, default_val=8))
         sg.sleep_time = int(get_config_entry(config, 'Still', 'sleep_time', reqd=False, remove_spaces=True))
         sg.cluster_scheduler = int(get_config_entry(config, 'Still', 'cluster_scheduler', reqd=False, remove_spaces=True))
+        sg.drmaa_shared = get_config_entry(config, 'Still', 'drmaa_shared', reqd=False, remove_spaces=True)
         sg.log_path = get_config_entry(config, 'Still', 'log_path', reqd=False, remove_spaces=False, default_val=basedir + 'log/')
 
         if "ScriptEnvironmentVars" in config_sections:  # Read in allow the env vars for the do_ scripts
@@ -292,7 +294,7 @@ def start_server(sg, wf, args):
     sg.logger = setup_logger("TS", "DEBUG", sg.log_path)
     sg.preflight_check_ts(wf)
 
-    task_server = TaskServer(sg.dbi, sg, data_dir=mydata_dir, port=my_port, path_to_do_scripts=sg.path_to_do_scripts)
+    task_server = TaskServer(sg.dbi, sg, data_dir=mydata_dir, port=my_port, path_to_do_scripts=sg.path_to_do_scripts, drmaa_shared=sg.drmaa_shared)
     task_server.start()
     return
 

@@ -26,4 +26,3 @@ if [ $return_code -ne 0 ]; then
    echo "Wedge had a problem!"
    exit 1
 fi
-      

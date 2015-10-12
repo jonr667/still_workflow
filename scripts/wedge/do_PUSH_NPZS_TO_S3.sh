@@ -23,4 +23,3 @@ if [ $return_code -ne 0 ]; then
    echo "Could not push npz files for obs : $obs"
    exit 1
 fi
-                     

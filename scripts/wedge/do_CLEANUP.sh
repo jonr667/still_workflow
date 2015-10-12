@@ -20,4 +20,3 @@ if [ $return_code -ne 0 ]; then
    echo "Could not clean directory $pwd/$obs"
    exit 1
 fi
-                     
