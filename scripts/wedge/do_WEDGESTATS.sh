@@ -21,7 +21,7 @@ if [ ! -d $obs ]; then
 fi
 cd $1
 
-WEDGESTATS=`python /home/ec2-user/mwa_wedge/wedgestats.py $obs.p.npz`
+WEDGESTATS=`python /shared/mwa_wedge/wedgestats.py $obs.p.npz`
 
 echo found $WEDGESTATS
 
