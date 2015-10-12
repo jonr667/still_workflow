@@ -18,7 +18,7 @@ if [ ! -d $pwd/$obs ]; then
 fi
 
 cd $obs
-python /shared/mwa_wedge/wedge.py --baselines_file /shared/mwa_wedge/MWA_128T_antenna_locations.txt -o ./$1.uvfits
+/usr/local/mwa/anaconda/bin/python /shared/mwa_wedge/wedge.py --baselines_file /shared/mwa_wedge/MWA_128T_antenna_locations.txt -o ./$1.uvfits
 
 return_code=$?
 
