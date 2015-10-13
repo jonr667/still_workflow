@@ -81,8 +81,8 @@ class Task:
     def run_drmaa(self):
         jt = self.ts.drmaa_session.createJobTemplate()
         jt.remoteCommand = "%s/do_%s.sh" % (self.path_to_do_scripts, self.task)
-        # self.stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.data_dir, self.obs, self.task)
-        self.stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.drmaa_shared, self.obs, self.task)
+        self.stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.data_dir, self.obs, self.task)
+        #self.stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.drmaa_shared, self.obs, self.task)
         self.remove_file_if_exists(self.stdout_stderr_file)
 
         jt.nativeSpecification = "-q %s -wd %s -j y -o %s %s" % (self.drmaa_queue, self.cwd, self.stdout_stderr_file, self.drmaa_args)  # Don't forget -e as well..
