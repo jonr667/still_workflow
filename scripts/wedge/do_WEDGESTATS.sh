@@ -39,7 +39,7 @@ if [ $return_code = 0 ]; then
 
    previous_window=`psql -h $pg_qc_host $pg_qc_db -U $pg_qc_username -c "select count(*) from qs where obsid=${obs}" -t -A`
    return_code=$?
-   if [ $return_code = 0 ]; then
+   if [ $return_code != 0 ]; then
       echo "Could not connect to postgres db : $pg_qc_host"
       exit 1
    fi
@@ -48,7 +48,7 @@ if [ $return_code = 0 ]; then
       echo "Creating new wedge record for $obs"
       psql -h $pg_qc_host $pg_qc_db -U $pg_qc_username -c "insert into qs (obsid,window_x,window_y,wedge_res_x,wedge_res_y,gal_wedge_x,gal_wedge_y,ptsrc_wedge_x,ptsrc_wedge_y,wedge_timestamp) values (${obs},${window_x},${window_y},${wedge_res_x},${wedge_res_y},${gal_wedge_x},${gal_wedge_y},${ptsrc_wedge_x},${ptsrc_wedge_y},current_timestamp)"
       return_code=$?
-      if [ $return_code = 0 ]; then
+      if [ $return_code != 0 ]; then
          echo "Could not connect to postgres db : $pg_qc_host"
          exit 1
       fi
@@ -58,7 +58,7 @@ if [ $return_code = 0 ]; then
       echo "updating old wedge record for $obs"
       psql -h $pg_qc_host $pg_qc_db -U $pg_qc_username -c "update qs set (window_x,window_y,wedge_res_x,wedge_res_y,gal_wedge_x,gal_wedge_y,ptsrc_wedge_x,ptsrc_wedge_y,wedge_timestamp) = (${window_x},${window_y},${wedge_res_x},${wedge_res_y},${gal_wedge_x},${gal_wedge_y},${ptsrc_wedge_x},${ptsrc_wedge_y},current_timestamp) where obsid=${obs}"
       return_code=$?
-      if [ $return_code = 0 ]; then
+      if [ $return_code != 0 ]; then
          echo "Could not connect to postgres db : $pg_qc_host"
          exit 1
       fi
