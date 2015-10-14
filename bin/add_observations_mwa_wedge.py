@@ -25,7 +25,6 @@ def main():
     parser.add_argument('-o', dest='obsnums', required=False, nargs='+',
                         help="List of obervations seperated by spaces")
 
-
     parser.set_defaults(config_file="%setc/still.cfg" % basedir)
 
     args, unknown = parser.parse_known_args()
