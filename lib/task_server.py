@@ -214,10 +214,14 @@ class TaskClient:
             args_string = ' '.join(args)
             if self.sg.cluster_scheduler == 1:
                 drmaa_args_string = self.gen_drmaa_args(task, obs)
-                if self.wf.drmaa_queue_by_task[task]:
-                    drmaa_queue = self.wf.drmaa_queue_by_task[task]
-                else:
+                try:
+                    if self.wf.drmaa_queue_by_task[task]:
+                        drmaa_queue = self.wf.drmaa_queue_by_task[task]
+                    else:
+                        drmaa_queue = self.wf.default_drmaa_queue
+                except:
                     drmaa_queue = self.wf.default_drmaa_queue
+
             else:
                 drmaa_queue = ""
                 drmaa_args_string = ""
