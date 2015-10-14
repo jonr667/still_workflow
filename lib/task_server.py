@@ -85,7 +85,7 @@ class Task:
         #self.stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.drmaa_shared, self.obs, self.task)
         self.remove_file_if_exists(self.stdout_stderr_file)
 
-        jt.nativeSpecification = "-q %s -wd %s -j y -o %s %s" % (self.drmaa_queue, self.cwd, self.stdout_stderr_file, self.drmaa_args)  # Don't forget -e as well..
+        jt.nativeSpecification = "-q %s -wd %s -V -j y -o %s %s" % (self.drmaa_queue, self.cwd, self.stdout_stderr_file, self.drmaa_args)  # Don't forget -e as well..
         jt.args = self.args
         jt.joinFiles = True
         jid = self.ts.drmaa_session.runJob(jt)  # Get the Job ID
