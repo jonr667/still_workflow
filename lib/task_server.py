@@ -260,8 +260,10 @@ class TaskClient:
         return status, self.error_count
 
     def gen_drmaa_args(self, task, obs):
-
-        args = self.wf.drmaa_args[task]
+        try:
+            args = self.wf.drmaa_args[task]
+        except:
+            args = ""
         return args
 
     def gen_args(self, task, obs):
