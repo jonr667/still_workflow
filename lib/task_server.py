@@ -125,8 +125,13 @@ class Task:
         return process
 
     def finalize(self):
-        with open(self.stdout_stderr_file, 'r') as output_file:  # Read in stdout/stderr combined file
-            task_output = output_file.read()
+        try:
+            with open(self.stdout_stderr_file, 'r') as output_file:  # Read in stdout/stderr combined file
+                task_output = output_file.read()
+        except:
+            logger.debug("Task.finalize : Could not open stdout/stderr file : %s marking task as FAILED" % self.stdout_stderr_file)
+            self.record_failure()
+            return
 
         if self.sg.cluster_scheduler == 1:
             task_info = self.ts.drmaa_session.wait(self.jid, self.ts.drmaa_session.TIMEOUT_WAIT_FOREVER)  # get JobInfo instance
