@@ -417,9 +417,11 @@ class TaskServer(HTTPServer):
 
     def poll_task_status(self, task):
         if self.sg.cluster_scheduler == 1:  # Do we need to interface with a cluster scheduler?
-
-            task_info = self.drmaa_session.jobStatus(task.jid)
-
+            try:
+                task_info = self.drmaa_session.jobStatus(task.jid)
+            except:
+                task_info = "failed"
+                logger.debug("TS: poll_task_status : DRMAA jobstatus failed for jid : %s" % task.jid)
             if task_info == "done" or task_info == "failed":  # Check if task is done or failed..
                 poll_status = True
             else:
