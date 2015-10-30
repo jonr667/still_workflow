@@ -46,6 +46,7 @@ class Task:
         self.drmaa_stderr_file = ''
         self.drmaa_args = drmaa_args
         self.drmaa_queue = drmaa_queue
+        self.stdout_stderr_file = ''
 
     def remove_file_if_exists(self, filename):
         try:
@@ -65,6 +66,7 @@ class Task:
         return
 
     def run_popen(self):
+
         self.stdout_stderr_file = "%s/%s_%s.stdout_stderr" % (self.ts.data_dir, self.obs, self.task)
         self.remove_file_if_exists(self.stdout_stderr_file)
         stdout_stderr_buf = open(self.stdout_stderr_file, "w")
@@ -129,7 +131,7 @@ class Task:
             with open(self.stdout_stderr_file, 'r') as output_file:  # Read in stdout/stderr combined file
                 task_output = output_file.read()
         except:
-            logger.debug("Task.finalize : Could not open stdout/stderr file : %s marking task as FAILED" % self.stdout_stderr_file)
+            logger.debug("Task.finalize : Could not open stdout/stderr file for obs: %s  and task : %s marking task as FAILED" % (self.obs, self.task))
             self.record_failure()
             return
 
