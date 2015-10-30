@@ -296,6 +296,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                     continue
 
                 while len(self.get_launched_actions(tm, tx=False)) < tm_info.max_num_of_tasks:  # I think this will work
+                    logger.debug("Number of launched actions : %s" % len(self.get_launched_actions(tm, tx=False)))
                     action_from_queue = self.pop_action_queue(tm, tx=False)  # FIXME: MIght still be having a small issue when a TM goes offline and back on
 
                     if action_from_queue is not False:
