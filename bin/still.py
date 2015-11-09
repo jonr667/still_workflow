@@ -306,7 +306,7 @@ def main():
     # Probably accept config file location and maybe config file section as command line arguments
     # for the moment this is mostly just placeholder stuffs
 
-    parser = argparse.ArgumentParser(description='STILL workflow management software')
+    parser = argparse.ArgumentParser(description='AstroTaskr Workflow Management Software')
     parser.add_argument('--init', dest='init', action='store_true',
                         help='Initialize the database if this is the first time running this')
     parser.add_argument('--server', dest='server', action='store_true',

@@ -105,13 +105,11 @@ class Task:
         self.full_env.update(global_env_vars)
 
         try:
-
             if self.sg.cluster_scheduler == 1:  # Do we need to interface with a cluster scheduler?
                 self.jid = self.run_drmaa()  # Yup
                 process = self.jid
             else:
                 process = self.run_popen()  # Use Popen to run a normal process
-
         except Exception:
             logger.exception('Task._run: (%s,%s) error="%s"' % (self.task, self.obs, ' '.join(['%s/do_%s.sh' % (self.path_to_do_scripts, self.task)] + self.args)))
             self.record_failure()

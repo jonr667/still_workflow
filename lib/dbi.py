@@ -125,6 +125,8 @@ class Log(Base):
     stage = Column(String(200))
     # stage = Column(Enum(*FILE_PROCESSING_STAGES, name='FILE_PROCESSING_STAGES'))
     exit_status = Column(Integer)
+    start_time = Column(DateTime)
+    end_time = Column(DateTime)
     timestamp = Column(DateTime, nullable=False, default=func.current_timestamp())
     logtext = Column(Text)
     # observation = relationship(Observation, backref=backref('logs', uselist=True), cascade="all, delete-orphan", single_parent=True)
@@ -274,9 +276,10 @@ class DataBaseInterface(object):
 
     def add_log(self, obsnum, status, logtext, exit_status):
         """
-        add a log entry about an obsnum
+        add a log entry about an obsnum, appears to only be run when a task is first started
         """
-        LOG = Log(obsnum=obsnum, stage=status, logtext=logtext, exit_status=exit_status)
+        current_datetime = datetime.datetime.now()
+        LOG = Log(obsnum=obsnum, stage=status, logtext=logtext, exit_status=exit_status, start_time=current_datetime)
         s = self.Session()
         s.add(LOG)
         s.commit()
@@ -287,11 +290,13 @@ class DataBaseInterface(object):
         replace the contents of the most recent log
         """
         s = self.Session()
+        current_datetime = datetime.datetime.now()
         if s.query(Log).filter(Log.obsnum == str(obsnum)).count() == 0:
             s.close()
             self.add_log(str(obsnum), status, logtext, exit_status)
             return
         LOG = s.query(Log).filter(Log.obsnum == str(obsnum)).order_by(Log.timestamp.desc()).limit(1).one()
+        LOG.end_time = current_datetime
         if exit_status is not None:
             LOG.exit_status = exit_status
         if logtext is not None:
