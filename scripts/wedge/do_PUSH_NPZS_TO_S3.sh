@@ -2,6 +2,8 @@
 
 obs=$1
 pwd=$(pwd)
+export AWS_ACCESS_KEY_ID="${aws_id}"
+export AWS_SECRET_ACCESS_KEY="${aws_passwd}"
 
 if [ ! $1 ]; then
    echo "No observation ID given."
