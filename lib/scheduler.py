@@ -464,6 +464,10 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             # logger.debug("COMPLETE for obsid : %s" % obsnum)  # You can see how often completeds are checked by uncommenting this.. its a LOT
             return None  # obs is complete
 
+        if status == '' or status == 'NEW':
+            # Not yet ready for processing.
+            return None
+
         # Check that the still assigned to the obs is currently in the list of active stills
         # !!!!FIXME!!!  - Maybe fixed?
         if obsinfo.stillhost is not None:

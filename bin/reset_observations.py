@@ -18,7 +18,6 @@ sys.path.append(basedir + 'lib')
 
 from dbi import File
 from still import process_client_config_file, WorkFlow, SpawnerClass, StillDataBaseInterface
-from still_shared import logger
 
 
 def file2jd(zenuv):
