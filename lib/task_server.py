@@ -103,6 +103,7 @@ class Task:
         self.full_env = current_env.copy()
         self.full_env.update(self.custom_env_vars)
         self.full_env.update(global_env_vars)
+        self.full_env['PATH'] = self.path_to_do_scripts + ':' + self.full_env['PATH']  # always look in do scripts dir. this is where we're putting production python scripts.
 
         try:
             if self.sg.cluster_scheduler == 1:  # Do we need to interface with a cluster scheduler?
@@ -277,7 +278,8 @@ class TaskClient:
 
     def gen_args(self, task, obs):
         args = []
-        pot, path, basename = self.dbi.get_input_file(obs)  # Jon: Pot I believe is host where file to process is, basename is just the file name
+        pot, path_prefix, parent_dirs, basename = self.dbi.get_input_file(obs, apply_path_prefix=True)
+        path = os.path.join (path_prefix, parent_dirs)
         outhost, outpath = self.dbi.get_output_location(obs)
 
         #  These varibles are here to be accessible to the arguments variable in the config file
@@ -351,11 +353,17 @@ class TaskHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         task_already_exists = False
-
-        form = cgi.FieldStorage(fp=self.rfile, headers=self.headers, environ={'REQUEST_METHOD': 'POST', 'CONTENT_TYPE': self.headers['Content-Type']})
-
+        try:
+            form = cgi.FieldStorage(fp=self.rfile, headers=self.headers, environ={'REQUEST_METHOD': 'POST', 'CONTENT_TYPE': self.headers['Content-Type']})
+        except:
+            logger.debug("Issues getting post info")
         self.send_response(200)  # Return a response of 200, OK to the client
         self.end_headers()
+
+        if upper(self.path) == "/HALT_NOW":
+            logger.debug("Shutdown AWS node!")
+            subprocess.call(["halt", "-f"])
+            sys.exit(0)
 
         if upper(self.path) == "/NEW_TASK":                # New task recieved, grab the relavent bits out of the POST
             task = form.getfirst("task", "")
@@ -500,7 +508,7 @@ class TaskServer(HTTPServer):
         while self.keep_running is True:
             hostname = socket.gethostname()
             ip_addr = socket.gethostbyname(hostname)
-            cpu_usage = psutil.cpu_percent()
+            cpu_usage = os.getloadavg()[1]#using the 5 min load avg
             self.dbi.still_checkin(hostname, ip_addr, self.port, int(cpu_usage), self.data_dir, status="OK", max_tasks=self.sg.actions_per_still, cur_tasks=len(self.active_tasks))
             time.sleep(10)
         return 0

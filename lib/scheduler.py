@@ -10,6 +10,7 @@ import datetime
 import signal
 import copy
 import pickle
+import re
 
 # import numpy as np
 from itertools import cycle
@@ -29,6 +30,33 @@ logger = True  # This is just here because the jedi syntax checker is dumb.
 
 MAXFAIL = 5  # Jon : move this into config
 TIME_INT_FOR_NEW_TM_CHECK = 90
+
+
+def file2jd(zenuv):
+    return re.findall(r'\d+\.\d+', zenuv)[0]
+
+
+def file2pol(zenuv):
+    return re.findall(r'\.(.{2})\.', zenuv)[0]
+
+str2pol = {
+    'I' :  1,   # Stokes Paremeters
+    'Q' :  2,
+    'U' :  3,
+    'V' :  4,
+    'rr': -1,   # Circular Polarizations
+    'll': -2,
+    'rl': -3,
+    'lr': -4,
+    'xx': -5,   # Linear Polarizations
+    'yy': -6,
+    'xy': -7,
+    'yx': -8,
+}
+
+pol2str = {}
+for k in str2pol:
+    pol2str[str2pol[k]] = k
 
 
 def action_cmp(x, y):
@@ -73,8 +101,8 @@ class Action:
             index2 = None
 
         for status_of_neighbor in self.neighbor_status:
-            if status_of_neighbor is None:  # indicates that obs hasn't been entered into DB yet
-                return False
+            if status_of_neighbor in (None, '', 'NEW'):
+                return False  # obs not entered in DB or not ready for processing
 
             index_of_neighbor_status = self.wf.workflow_actions.index(status_of_neighbor)
 
@@ -203,6 +231,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         self.wf = workflow  # Jon: Moved the workflow class to instantiated on object creation, should do the same for dbi probably
         self.task_clients = {}
         self.stills = []
+        self.started_aws_servers = 0
 
         signal.signal(signal.SIGINT, self.signal_handler)  # Enabled clean shutdown after Cntrl-C event.
 
@@ -210,6 +239,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         threading.Thread(target=self.serve_forever).start()  # Launch a thread of a multithreaded http server to view information on currently running tasks
 
         # If task_clients is set to AUTO then check the db for still servers
+
         if task_clients[0].host_port[0] == "AUTO":
             self.find_all_taskmanagers()
             self.auto = 1
@@ -232,6 +262,22 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             logger.debug("Can't find any TaskManagers! Waiting for 10sec and trying again")
             time.sleep(10)
             self.stills = self.dbi.get_available_stills()
+
+            num_of_open_obs = len(self.dbi.list_open_observations())
+            logger.debug("Number of Open obs: %s" % num_of_open_obs)
+            if self.sg.aws_enabled == "1" and self.started_aws_servers == 0 and num_of_open_obs > 0:
+                import aws_interface
+                if int(num_of_open_obs) < int(self.sg.aws_instance_count):
+                    print("Got here?  num_of_open_obs : %s, aws_instance_count : %s" % (num_of_open_obs, self.sg.aws_instance_count))
+                    aws_inst_num_to_start = num_of_open_obs
+                else:
+                    aws_inst_num_to_start = self.sg.aws_instance_count
+
+                print("Lets start up some AWS nodes!, Num : %s , spot price %s" % (aws_inst_num_to_start, self.sg.aws_spot_price))
+                aws_interface.start_aws_nodes(aws_inst_num_to_start, self.sg.aws_instance_type, self.sg.aws_spot_price, self.sg.aws_path_to_rtp, self.sg.aws_key_name, self.sg.aws_ami_id)
+                time.sleep(30)
+                self.started_aws_servers = 1
+                print("Maybe we stared some aws nodes....")
 
         for still in self.stills:
             if still.hostname not in self.task_clients:
@@ -276,8 +322,15 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         logger.info('Starting Scheduler')
         self.dbi = dbi
         last_checked_for_stills = time.time()
-
         while self.keep_running:
+
+            num_of_open_obs = len(self.dbi.list_open_observations())
+            if num_of_open_obs == 0 and self.sg.aws_enabled == "1":
+                for still in self.launched_actions:
+                    self.post_to_server(still, "HALT_NOW")
+                self.shutdown()
+                logger.debug("Shutting down AWS nodes as we are out of data to process...")
+                # shutdown aws nodes...
 
             if (time.time() - last_checked_for_stills) > TIME_INT_FOR_NEW_TM_CHECK:
                 self.find_all_taskmanagers()
@@ -286,8 +339,8 @@ class Scheduler(ThreadingMixIn, HTTPServer):
 
             self.ext_command_hook()
             self.get_new_active_obs()
-
-            self.update_action_queue(ActionClass, action_args)
+            if self.check_if_stills_reporting_full() is not True:
+                self.update_action_queue(ActionClass, action_args)
             launched_actions_copy = copy.copy(self.launched_actions)
             # Launch actions that can be scheduled
             for tm in launched_actions_copy:
@@ -320,6 +373,25 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         self.keep_running = False
         HTTPServer.shutdown(self)
         sys.exit(0)
+
+    def post_to_server(self, still, data_type):
+        if data_type == "HALT_NOW":
+            conn_type = "POST"
+            conn_path = "/HALT_NOW"
+            response_data = ""
+        #try:  # Attempt to open a socket to a server and send over task instructions
+        tm_info = self.dbi.get_still_info(still)
+        logger.debug("connecting to TaskServer %s" % tm_info.ip_addr)
+
+        conn = httplib.HTTPConnection(tm_info.ip_addr, tm_info.port, timeout=20)
+        conn.request(conn_type, conn_path)
+        #response = conn.getresponse()
+        #response_data = response.read()
+        #except:
+         #   logger.exception("Could not connect to server %s on port : %s" % (tm_info.ip_addr, tm_info.port))
+        #finally:
+        conn.close()
+        return response_data
 
     def get_all_neighbors(self, obsnum):
         ###
@@ -447,6 +519,29 @@ class Scheduler(ThreadingMixIn, HTTPServer):
 
         return
 
+    def check_if_stills_reporting_full(self):
+        launched_actions_copy = copy.copy(self.launched_actions)
+
+        for tm in launched_actions_copy:
+            tm_info = self.dbi.get_still_info(tm)
+            logger.debug("tm_info.cur_num_of_tasks : %s, tm_info.max_num_of_tasks : %s" % (tm_info.cur_num_of_tasks, tm_info.max_num_of_tasks))
+            if tm_info.cur_num_of_tasks < tm_info.max_num_of_tasks:
+
+                return False
+        return True
+
+    def check_if_stills_full(self):
+        launched_actions_copy = copy.copy(self.launched_actions)
+
+        for tm in launched_actions_copy:
+            tm_info = self.dbi.get_still_info(tm)
+            tm_obs_count = len(self.dbi.list_open_observations_on_tm(tm_hostname=tm))
+            #logger.debug("Obs count for : %s : %s" % (tm, tm_obs_count))
+            if tm_obs_count < tm_info.max_num_of_tasks:
+                logger.debug("Max count NOT reached for : %s" % (tm))
+                return False
+        return True
+
     def get_action(self, obsnum, ActionClass=None, action_args=()):
         '''Find the next actionable step for obs f (one for which all
         prerequisites have been met.  Return None if no action is available.
@@ -475,6 +570,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
                 pass
             else:
                 return None
+
         if self.wf.neighbors == 1:  # FIX ME, I don't want to call the same thing twice.. its ugly
             neighbors = self.dbi.get_neighbors(obsnum)
 
@@ -495,13 +591,22 @@ class Scheduler(ThreadingMixIn, HTTPServer):
         still = self.dbi.get_obs_still_host(obsnum)
 
         if not still:
+            #logger.debug("Getting here!!!!!")
+            # JON ADD: Add check here to see if all the stills are already full, this will allow us to grow the clusters dynamically..
             if self.initial_startup is True:
+                #logger.debug("Getting here 2!!!!!")
 
-                still = self.tm_cycle.next().hostname  # Balance out all the nodes on startup
+                if self.check_if_stills_full() is not True:
+                    logger.debug("Getting here 3!!!!!")
+                    still = self.tm_cycle.next().hostname  # Balance out all the nodes on startup
+                else:
+                    return None
             else:
-
-                still = self.obs_to_still(obsnum)  # Get a still for a new obsid if one doesn't already exist.
-                if still is False:
+                if self.check_if_stills_full() is not True:
+                    still = self.obs_to_still(obsnum)  # Get a still for a new obsid if one doesn't already exist.
+                    if still is False:
+                        return None
+                else:
                     return None
 
             self.dbi.set_obs_still_host(obsnum, still)  # Assign the still to the obsid
@@ -526,8 +631,9 @@ class Scheduler(ThreadingMixIn, HTTPServer):
     def determine_priority(self, action):
         '''Assign a priority to an action based on its status and the time
         order of the obs to which this action is attached.'''
-
-        pol, jdcnt = int(action.obs) / 2 ** 32, int(action.obs) % 2 ** 32  # XXX maybe not make this have to explicitly match dbi bits
+        jdcnt = (float(file2jd(action.obs)) - 2415020) / 0.005  # get the jd and convert to an integer (0.005 is the length of a typical PAPER obs)
+        pol = str2pol[file2pol(action.obs)]
+        # pol, jdcnt = int(action.obs) / 2 ** 32, int(action.obs) % 2 ** 32  # XXX maybe not make this have to explicitly match dbi bits
         return jdcnt * 4 + pol  # prioritize first by time, then by pol
         # XXX might want to prioritize finishing a obs already started before
         # moving to the latest one (at least, up to a point) to avoid a
@@ -546,7 +652,7 @@ class Scheduler(ThreadingMixIn, HTTPServer):
             if mystill in self.task_clients:
                 return mystill
             else:  # We couldn't find its still server as its not in task_clients for whatever reason so punt for now
-                logger.debug("Obs attached to non-existant STILL OBS : %s, STILL %s" % (obs, mystill))
+                logger.debug("Obs attached to non-existant STI OBS : %s, STILL %s" % (obs, mystill))
                 return 0
         else:
             still = self.dbi.get_most_available_still()

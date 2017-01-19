@@ -1,0 +1,36 @@
+
+*** These modified files were found in JOE when it aborted on Mon Jan  9 11:58:00 2017
+*** JOE was aborted by UNIX signal 1
+
+*** File '(Unnamed)'
+],\n\r
+\n
+PyVarObject_HEAD_INIT(NULL, 0)
+PyVarObject_HEAD_INIT(NULL, 0)
+PyLong_FromLong
+PyBytes_AS_STRING
+
+*** File '(Unnamed)'
+2016-07-10 02:04:59.966373
+2016-07-10 02:12:45.084993
+07-11
+name
+cotter
+cotter
+1063638824
+1066653408
+1130774824
+1131551744
+
+*** File '(Unnamed)'
+the.txt
+do_COPY_FILES_TO_PRODUCTION.sh
+do_COTTER.sh
+still_mwa.cfg
+mwa_cotter_s3.cfg
+mwa_cotter_s3.cfg
+do_COPY_METAFITS_HEADER.sh
+do_COPY_FILES_TO_PRODUCTION.sh
+do_COPY_FILES_TO_PRODUCTION.sh
+do_COPY_FILES_TO_PRODUCTION.sh
+do_COPY_FILES_TO_PRODUCTION.sh

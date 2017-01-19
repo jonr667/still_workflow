@@ -5,10 +5,11 @@ import logging
 import psutil
 import datetime
 import numpy as np
+from contextlib import contextmanager
 
 # from subprocess import Popen, PIPE
 
-from sqlalchemy import Table, Column, String, Integer, ForeignKey
+from sqlalchemy import Table, BigInteger, Column, String, Integer, ForeignKey
 from sqlalchemy import Float, func, DateTime, BigInteger, Text
 from sqlalchemy.orm import relationship, backref, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
@@ -107,6 +108,7 @@ class File(Base):
     __tablename__ = 'file'
     filenum = Column(Integer, primary_key=True)
     filename = Column(String(200))
+    path_prefix = Column(String(200))
     host = Column(String(100))
     obsnum = Column(String(100), ForeignKey('observation.obsnum'))
     # this next line creates an attribute Observation.files which is the list of all
@@ -146,6 +148,7 @@ class Still(Base):
     total_memory = Column(Integer)     # Jon : Placeholder for future expansion
     cur_num_of_tasks = Column(Integer)
     max_num_of_tasks = Column(Integer)
+    free_disk = Column(BigInteger) # measured in bytes
 
 
 class DataBaseInterface(object):
@@ -167,7 +170,7 @@ class DataBaseInterface(object):
                 sys.exit(1)
         elif dbtype == 'mysql':
             try:
-                self.engine = create_engine('mysql://{0}:{1}@{2}:{3}/{4}'.format(dbuser, dbpasswd, dbhost, dbport, dbname), pool_size=20, max_overflow=40, echo=False)
+                self.engine = create_engine('mysql+pymysql://{0}:{1}@{2}:{3}/{4}'.format(dbuser, dbpasswd, dbhost, dbport, dbname), pool_size=20, max_overflow=40, echo=False)
             except:
                 logger.exception("Could not connect to the mysql database.")
                 sys.exit(1)
@@ -176,6 +179,26 @@ class DataBaseInterface(object):
         except:
             logger.exception("Could not create database binding, please check database settings")
             sys.exit(1)
+
+    @contextmanager
+    def session_scope(self):
+        '''
+        creates a session scope
+        can use 'with'
+
+        Returns
+        -------
+        object: session scope to be used to access database with 'with'
+        '''
+        session = self.Session()
+        try:
+            yield session
+            session.commit()
+        except:
+            session.rollback()
+            raise
+        finally:
+            session.close()
 
     def test_db(self):
         tables = Base.metadata.tables.keys()
@@ -274,6 +297,7 @@ class DataBaseInterface(object):
         Base.metadata.bind = self.engine
         Base.metadata.create_all()
 
+
     def add_log(self, obsnum, status, logtext, exit_status):
         """
         add a log entry about an obsnum, appears to only be run when a task is first started
@@ -339,7 +363,8 @@ class DataBaseInterface(object):
         s.close()
         return FAILED_OBSNUMS
 
-    def add_observation(self, obsnum, date, date_type, pol, filename, host, outputhost='', length=10 / 60. / 24, status='NEW'):
+    def add_observation(self, obsnum, date, date_type, pol, filename, host, outputhost='',
+                        length=10 / 60. / 24, status='NEW', path_prefix=None):
         """
         create a new observation entry.
         returns: obsnum  (see jdpol2obsnum)
@@ -351,14 +376,17 @@ class DataBaseInterface(object):
         s.commit()
         obsnum = OBS.obsnum
         s.close()
-        self.add_file(obsnum, host, filename)
+        self.add_file(obsnum, host, filename, path_prefix=path_prefix)
         return obsnum
 
-    def add_file(self, obsnum, host, filename):
+    def add_file(self, obsnum, host, filename, path_prefix=None):
         """
         Add a file to the database and associate it with an observation.
         """
-        FILE = File(filename=filename, host=host)
+        if path_prefix is not None and not filename.startswith (path_prefix):
+            raise Exception ('if using path_prefix, filename must start with it; got %s, %s' % (path_prefix, filename))
+
+        FILE = File(filename=filename, host=host, path_prefix=(path_prefix or ''))
         # get the observation corresponding to this file
         s = self.Session()
         OBS = s.query(Observation).filter(Observation.obsnum == obsnum).one()
@@ -391,7 +419,8 @@ class DataBaseInterface(object):
         for obs in obslist:
             obsnum = self.add_observation(obs['obsnum'], obs['date'], obs['date_type'], obs['pol'],
                                           obs['filename'], obs['host'], outputhost=obs['outputhost'],
-                                          length=obs['length'], status=obs['status'])
+                                          length=obs['length'], status=obs['status'],
+                                          path_prefix=obs.get('path_prefix'))
 
             neighbors[obsnum] = (obs.get('neighbor_low', None), obs.get('neighbor_high', None))
 
@@ -522,7 +551,7 @@ class DataBaseInterface(object):
         yay = self.update_obs(OBS)
         return yay
 
-    def get_input_file(self, obsnum):
+    def get_input_file(self, obsnum, apply_path_prefix=False):
         """
         input:observation number
         return: host,path (the host and path of the initial data set on the pot)
@@ -532,6 +561,7 @@ class DataBaseInterface(object):
         mypath = ""
         myhost = ""
         myfile = ""
+        path_prefix = ""
         s = self.Session()
         OBS = s.query(Observation).filter(Observation.obsnum == obsnum).one()
         # Jon: Maybe make the like statement a variable in the config file? for now I will cheat for a bit
@@ -550,10 +580,23 @@ class DataBaseInterface(object):
             myhost = POTFILE.host
             mypath = os.path.dirname(POTFILE.filename)
             myfile = os.path.basename(POTFILE.filename)
+            path_prefix = POTFILE.path_prefix
         except:
             pass
         s.close()
-        return myhost, mypath, myfile
+
+        if not apply_path_prefix:
+            return myhost, mypath, myfile
+
+        if not mypath.startswith (path_prefix):
+            raise Exception ('internal consistency failure: filename should start with %s but got %s'
+                             % (path_prefix, mypath))
+
+        if path_prefix == '':
+            return myhost, '', mypath, myfile
+
+        parent_dirs = mypath[len (path_prefix)+1:]
+        return myhost, path_prefix, parent_dirs, myfile
 
     def get_output_location(self, obsnum):
         """
@@ -585,6 +628,23 @@ class DataBaseInterface(object):
 
         return status
 
+    def get_obs_latest_log(self, obsnum):
+        """Return the latest log item associated with an obsnum. Returns None
+        if the obsnum has no log items.
+
+        """
+        with self.session_scope() as s:
+            item = s.query(Log).filter (Log.obsnum == obsnum).order_by(Log.timestamp.desc ()).first ()
+            if item is None:
+                return None
+            return {
+                'stage': item.stage,
+                'exit_status': item.exit_status,
+                'start_time': item.start_time,
+                'end_time': item.end_time,
+                'logtext': item.logtext,
+            }
+
     def get_available_stills(self):
         ###
         # get_available_stills : Retrun all stills that have checked in within the past 3min and have status of "OK"
@@ -605,10 +665,36 @@ class DataBaseInterface(object):
         return still
 
     def still_checkin(self, hostname, ip_addr, port, load, data_dir, status="OK", max_tasks=2, cur_tasks=0):
-        ###
-        # still_checkin : Check to see if the still entry already exists in the database, if it does update the timestamp, port, data_dir, and load.
-        #                 If does not exist then go ahead and create an entry.
-        ###
+        """Check to see if the still entry already exists in the database, if it does
+        update the timestamp, port, data_dir, and load. If does not exist then
+        go ahead and create an entry.
+
+        """
+        # Collect load statistics and classify ourselves as under duress if
+        # anything is too excessive.
+
+        current_load = os.getloadavg()[1] #use the 5 min load average
+
+        vmem = psutil.virtual_memory()
+        free_memory = vmem.available / (1024 ** 3)
+        total_memory = vmem.total / (1024 ** 3)
+
+        fs_info = os.statvfs (data_dir)
+        free_disk = fs_info.f_frsize * fs_info.f_bavail
+
+        duress = (
+            current_load >= 80 or # normalize to n_cpu()?
+            free_memory < 1 or # measured in gigs
+            free_disk < 2147483648 # measured in bytes; = 3 gigs
+        )
+
+        if duress and status == 'OK':
+            logger.warn ('still is under duress: load %s, free mem %s, free disk %s',
+                         current_load, free_memory, free_disk / 1024**3)
+            status = 'DURESS'
+
+        # Now actually update the database.
+
         s = self.Session()
 
         if s.query(Still).filter(Still.hostname == hostname).count() > 0:  # Check if the still already exists, if so just update the time
@@ -617,14 +703,16 @@ class DataBaseInterface(object):
             still.status = status
             # print("STILL_CHECKIN, test mode, setting load = 0, change back before release")
             # still.current_load = 0
-            still.current_load = psutil.cpu_percent()
+            still.current_load = current_load
             still.number_of_cores = psutil.cpu_count()
-            still.free_memory = round(psutil.virtual_memory().free / (1024 ** 3), 2)
-            still.total_memory = round(psutil.virtual_memory().total / (1024 ** 3), 2)
+            still.free_memory = round(free_memory, 2)
+            still.total_memory = round(total_memory, 2)
             still.data_dir = data_dir
             still.port = port
             still.max_num_of_tasks = max_tasks
             still.cur_num_of_tasks = cur_tasks
+            still.free_disk = free_disk
+
             s.add(still)
         else:  # Still doesn't exist, lets add it
             still = Still(hostname=hostname, ip_addr=ip_addr, port=port, current_load=load,
@@ -649,9 +737,10 @@ class DataBaseInterface(object):
         ###
         s = self.Session()
         since = datetime.datetime.now() - datetime.timedelta(minutes=3)
-        still = s.query(Still.hostname).filter(Still.last_checkin > since, Still.status == "OK", Still.current_load < 80).order_by(Still.current_load).all()
+        still = s.query(Still.hostname).filter(Still.last_checkin > since, Still.status == "OK").order_by(Still.current_load).all()
         np.random.shuffle(still)
         s.close()
+        # JON ADD: Return least used and none if over the limit
 
         return str(still[0][0])
 

@@ -12,4 +12,10 @@
 
 conn="$1"
 store_path="$2"
+#store_path tells the librarian where the data came within the librarian
+#basename of the store_path is just the filename
+#ie in a librarian path like /data2/stuff/2456789/zen.2456789.34775.uv
+# /data2/stuff is the "store"
+# 2456789/zen.2456789.34775.uv is the store_path
+# zen.2456789.34775.uv is the basename
 exec upload_to_librarian.py $conn $(basename $store_path) $store_path

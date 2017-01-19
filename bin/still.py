@@ -72,6 +72,13 @@ class SpawnerClass:
         self.ip_addr = ''
         self.cluster_scheduler = 0
         self.drmaa_shared = '/shared'
+        self.aws_enabled = 0
+        self.aws_spot_price = 0.00
+        self.aws_instance_type = 'None'
+        self.aws_instance_count = 0
+        self.aws_path_to_rtp = '/usr/local/RTP'
+        self.aws_key_name = ''
+        self.aws_ami_id = ''
 
     def preflight_check_scheduler(self):
         # Nothing to do here at the moment, just a place holder
@@ -203,12 +210,21 @@ def process_client_config_file(sg, wf):
         sg.block_size = int(get_config_entry(config, 'Still', 'block_size', reqd=False, remove_spaces=True))
         sg.actions_per_still = int(get_config_entry(config, 'Still', 'actions_per_still', reqd=False, remove_spaces=True, default_val=8))
         sg.sleep_time = int(get_config_entry(config, 'Still', 'sleep_time', reqd=False, remove_spaces=True))
-        sg.cluster_scheduler = int(get_config_entry(config, 'Still', 'cluster_scheduler', reqd=False, remove_spaces=True))
+        sg.cluster_scheduler = int(get_config_entry(config, 'Still', 'cluster_scheduler', reqd=False, remove_spaces=True, default_val=0))
         sg.drmaa_shared = get_config_entry(config, 'Still', 'drmaa_shared', reqd=False, remove_spaces=True)
         sg.log_path = get_config_entry(config, 'Still', 'log_path', reqd=False, remove_spaces=False, default_val=basedir + 'log/')
 
         if "ScriptEnvironmentVars" in config_sections:  # Read in allow the env vars for the do_ scripts
             sg.env_vars = dict(config.items('ScriptEnvironmentVars'))  # Put the vars into a dict that we will later pickle
+
+        if "AWS" in config_sections:  # Read in AWS variables if they are there
+            sg.aws_enabled = get_config_entry(config, 'AWS', 'aws_enabled', reqd=True, remove_spaces=True, default_val=0)
+            sg.aws_spot_price = get_config_entry(config, 'AWS', 'aws_spot_price', reqd=False, remove_spaces=True, default_val=0.00)
+            sg.aws_instance_type = get_config_entry(config, 'AWS', 'aws_instance_type', reqd=False, remove_spaces=True, default_val='m4.4xlarge')
+            sg.aws_instance_count = get_config_entry(config, 'AWS', 'aws_instance_count', reqd=False, remove_spaces=True, default_val=0)
+            sg.aws_path_to_rtp = get_config_entry(config, 'AWS', 'aws_path_to_rtp', reqd=False, remove_spaces=False, default_val='/usr/local/RTP')
+            sg.aws_ami_id = get_config_entry(config, 'AWS', 'aws_ami_id', reqd=False, remove_spaces=False, default_val='')
+            sg.aws_key_name = get_config_entry(config, 'AWS', 'aws_key_name', reqd=False, remove_spaces=False, default_val='')
 
         # Read in all the workflow information
         wf.workflow_actions = tuple(get_config_entry(config, 'WorkFlow', 'actions', reqd=True, remove_spaces=True).split(","))

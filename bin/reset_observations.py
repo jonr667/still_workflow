@@ -88,7 +88,6 @@ for filename in args.files:
         dbi.set_obs_pid(obsnum, None)
         dbi.set_obs_still_host(obsnum, None)
         dbi.add_log(obsnum, args.status, "issuing a reset_observations", 0)
-    except:
-        print("File %s doesn't exist") % filename
-        logger.info("File not found...")
+    except Exception as e:
+        print("failed on file %s: %s") % (filename, e)
         continue
